@@ -16,10 +16,6 @@
 ./cielo/ibla02tjq_raw.2.fits
 ./cielo/ibla02tmq_raw.1.fits
 ./cielo/ibla02tmq_raw.2.fits
-./cielo/ibu530rzq_raw.1.fits
-./cielo/ibu530rzq_raw.2.fits
-./cielo/ibu530tfq_raw.1.fits
-./cielo/ibu530tfq_raw.2.fits
 ./cielo/ibu540yiq_raw.1.fits
 ./cielo/ibu540yiq_raw.2.fits
 ./cielo/idfr02cgq_raw.1.fits
