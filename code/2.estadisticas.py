@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from skimage import io
 import os
+import pnmgz
 
 DATADIR = '../data/'
 RESDIR = '../results/'
@@ -35,10 +36,9 @@ with open(DATADIR+'cielo_sep.txt') as filelist:
             p100 = v[-1]
             rmean = np.mean(v[(10*m/100):(90*m/100)]) # media robusta
             rvar =np.var(v[:(90*m/100)]) # varianza robusta
-            #print 'j=',j,'p00=',p00,'p10',p10,' p50=',p50,' p90=',p90,' p100=',p100,' u1=',u1, 'u2=',u2
             colstats[:,j] = np.array([p00,p10,p50,p90,p100,rmean,rvar])
         # desplegue
-        np.savez(RESDIR+fbase+'stats.npz',colstats)
+        np.savez(RESDIR+fbase+'-stats.npz',colstats)
         plt.figure(2*k+1,figsize=(30,20))
         plt.title(fname)
         leg = ('p00','p10','p50','p90','p100','rmean','rvar')
@@ -46,7 +46,7 @@ with open(DATADIR+'cielo_sep.txt') as filelist:
             plt.subplot(2,3,i+1)
             plt.plot(colstats[i,:])
             plt.grid(True)
-            plt.title(leg)
+            plt.title(leg[i])
         plt.savefig(RESDIR+fbase+'-stats.png')
         plt.close()
         plt.figure(2*k+1,figsize=(30,20))
@@ -54,6 +54,7 @@ with open(DATADIR+'cielo_sep.txt') as filelist:
         for i in range(6):
             plt.subplot(2,3,i+1)
             plt.plot(colstats[i,:])
+            plt.title(leg[i])
             plt.grid(True)
         plt.savefig(RESDIR+fbase+'-ordenadas.png')
         #
@@ -68,10 +69,10 @@ with open(DATADIR+'cielo_sep.txt') as filelist:
         p100  = colstats[4,-1]
         rmean = colstats[5,n/2]
         rvar  = colstats[6,n/2]
-
-        print 'IMAGEN',fbase2,'p00=',p00,'p10=',p10,'p50=',p50,'p90=',p90,'p100=',p100,'rmean=',rmean,'rvar=',rvar,'u1=',u1,'u2=',u2
         u1 = p50 + (p90-p50)*5 # otro umbral
         u2 = rmean + np.sqrt(rvar)*5 # umbral de deteccion
+
+        print 'IMAGEN',fbase2,'p00=',p00,'p10=',p10,'p50=',p50,'p90=',p90,'p100=',p100,'rmean=',rmean,'rvar=',rvar,'u1=',u1,'u2=',u2
         mask = (img >= u1).astype(np.double)
         out = np.zeros((m,n,3))
         img = img - p00 
@@ -83,6 +84,7 @@ with open(DATADIR+'cielo_sep.txt') as filelist:
         plt.title(fname)
         plt.figure(2*k+2)
         plt.imshow(out)
-        io.imsave(RESDIR+fbase+"-pseudo.png",out)
-        io.imsave(RESDIR+fbase+"-det.png",mask)
+        #io.imsave(RESDIR+fbase+"-pseudo.png",out)
+        #io.imsave(RESDIR+fbase+"-det.png",mask)
+        pnmgz.imwrite(RESDIR+fbase+"-det0.pbm.gz",mask.astype(np.uint8),1)
         k = k + 1
