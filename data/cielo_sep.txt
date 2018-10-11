@@ -10,14 +10,6 @@
 ./cielo/ib5d07hkq_raw.2.fits
 ./cielo/ib5d12c8q_raw.1.fits
 ./cielo/ib5d12c8q_raw.2.fits
-./cielo/ibla02tgq_raw.1.fits
-./cielo/ibla02tgq_raw.2.fits
-./cielo/ibla02tjq_raw.1.fits
-./cielo/ibla02tjq_raw.2.fits
-./cielo/ibla02tmq_raw.1.fits
-./cielo/ibla02tmq_raw.2.fits
-./cielo/ibu540yiq_raw.1.fits
-./cielo/ibu540yiq_raw.2.fits
 ./cielo/idfr02cgq_raw.1.fits
 ./cielo/idfr02cgq_raw.2.fits
 ./cielo/idfr19wmq_raw.1.fits

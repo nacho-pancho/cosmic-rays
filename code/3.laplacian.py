@@ -17,9 +17,22 @@ plt.close('all')
 
 def condlap(img,mask):
     m,n = img.shape
-    L = np.zeros((m,n)).astype(np.double)
+    #
+    # entrada: padding con repeticion de bordes
+    #
     img2 = np.zeros((m+2,n+2)).astype(np.double)
     img2[1:(m+1),1:(n+1)] = img.astype(np.double)
+    img2[0,1:(n+1)] = img[0,:]
+    img2[m,1:(n+1)] = img[0,:]
+    img2[:,0] = img2[:,1]
+    img2[:,n] = img2[:,n-11]
+    #
+    # resultado
+    #
+    L = np.zeros((m,n)).astype(np.double)
+    #
+    # solo calculado en la mascara
+    #
     for i in range(m):
         for j in range(n):
             if mask[i,j]:
@@ -36,7 +49,7 @@ with open(DATADIR+'cielo_sep.txt') as filelist:
         fbase2 = fbase[fbase.rfind('/')+1:]
         print k,fbase2
         fdet   = RESDIR+fbase+"-det0.pbm.gz"
-        img    = fitsio.read(DATADIR+fname)
+        img    = pnmgz.imread(DATADIR+fbase+'-log.pgm.gz')
         stats  = np.load(RESDIR+fbase+"-stats.npz")
         colstats = stats['arr_0']
         mask   = pnmgz.imread(fdet)
@@ -49,7 +62,7 @@ with open(DATADIR+'cielo_sep.txt') as filelist:
         plt.grid(True)
         flap   = RESDIR+fbase+"-lap.png"
         plt.savefig(RESDIR+fbase+"-laphist.png")
-        lap    = np.log2(lap+1e-5)
+        #lap    = np.log2(lap+1e-5)
         lap    = (0.99/(np.max(lap)-np.min(lap)))*(lap-np.min(lap))
         print np.max(lap)
         io.imsave(flap,lap)
