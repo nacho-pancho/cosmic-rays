@@ -5,24 +5,6 @@ from skimage import io
 import os
 import pnmgz
 
-#################################################################################################
-
-def condlap(img,mask):
-    m,n = img.shape
-    L = np.zeros((m,n)).astype(np.double)
-    img2 = np.zeros((m+2,n+2)).astype(np.double)
-    img2[1:(m+1),1:(n+1)] = img.astype(np.double)
-    for i in range(m):
-        for j in range(n):
-            if mask[i,j]:
-                dif = np.abs(4*img2[i+1,j+1]-img2[i,j+1]-img2[i+1,j]-img2[i+2,j+1]-img2[i+1,j+2])
-                sum = np.abs(4*img2[i+1,j+1]+img2[i,j+1]+img2[i+1,j]+img2[i+2,j+1]+img2[i+1,j+2]) 
-                L[i,j] = dif / sum 
-    #L = 4.0*img2[1:m,1:n] - img2[1:m,0:(n-1)] - img2[1:m,2:(n+1)] - img2[0:(m-1),1:n] - img2[2:(m+1),1:n]
-    return L
-
-#################################################################################################
-
 DATADIR = '../data/'
 RESDIR = '../results/'
 EXT='.fits'
@@ -92,18 +74,6 @@ with open(DATADIR+'cielo_sep.txt') as filelist:
 
         print 'IMAGEN',fbase2,'p00=',p00,'p10=',p10,'p50=',p50,'p90=',p90,'p100=',p100,'rmean=',rmean,'rvar=',rvar,'u1=',u1,'u2=',u2
         mask = (img >= u1).astype(np.double)
-        out = np.zeros((m,n,3))
-        img = img - p00 
-        img = img*(0.99/np.max(img))
-        #img = np.log2(img.astype(np.double)+1)
-        out[:,:,0] = mask
-        out[:,:,1] = img
-        out[:,:,2] = img
-        plt.title(fname)
-        plt.figure(2*k+2)
-        plt.imshow(out)
-        #io.imsave(RESDIR+fbase+"-pseudo.png",out)
-        #io.imsave(RESDIR+fbase+"-det.png",mask)
         pnmgz.imwrite(RESDIR+fbase+"-det0.pbm.gz",mask.astype(np.uint8),1)
         io.imsave(RESDIR+fbase+"-det0.png",mask)
         #
@@ -121,22 +91,5 @@ with open(DATADIR+'cielo_sep.txt') as filelist:
 	io.imsave( fpseudo, plt.get_cmap('hot')(nimg) )
  	fpgmgz  = DATADIR + fbase + "-log.pgm.gz"
         pnmgz.imwrite( fpgmgz, (255.0*nimg).astype(np.uint8), 255 )
-        #
-        # segunda etapa: laplaciano
-        #
-        lap    = condlap(img,mask)
-        plt.figure(figsize=(30,20))
-        llap = np.log2(lap.ravel()+1)
-        h,b = np.histogram(llap[np.flatnonzero(llap)],bins=50)
-        plt.plot((b[1:]+b[:-1])/2,h)
-        plt.grid(True)
-        flap   = RESDIR+fbase+"-lap.png"
-        plt.savefig(RESDIR+fbase+"-laphist.png")
-        #lap    = np.log2(lap+1e-5)
-        lap    = (0.99/(np.max(lap)-np.min(lap)))*(lap-np.min(lap))
-        print np.max(lap)
-        io.imsave(flap,lap)
-        flap   = RESDIR+fbase+"-lapmap.png"
-        io.imsave(flap,plt.get_cmap('hot')(lap))
         #
         k = k + 1

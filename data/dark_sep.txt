@@ -1,0 +1,8 @@
+dark/ib910irxq_raw.1.fits
+dark/ib910irxq_raw.2.fits
+dark/ib910jyyq_raw.1.fits
+dark/ib910jyyq_raw.2.fits
+dark/ib910kxlq_raw.1.fits
+dark/ib910kxlq_raw.2.fits
+dark/ib910kxpq_raw.1.fits
+dark/ib910kxpq_raw.2.fits

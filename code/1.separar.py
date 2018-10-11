@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from skimage import io
 import os
+import sys
 
 DATADIR = '../data/'
 RESDIR = '../results/'
@@ -11,7 +12,12 @@ EXT = '.fits'
 os.system('mkdir -p ../' + RESDIR + 'cielo')
 os.system('mkdir -p ../' + RESDIR + 'dark')
 k = 0
-with open(DATADIR+'cielo.txt') as filelist:
+if len(sys.argv) > 1:
+    flist = sys.argv[1]
+else:
+    flist = 'cielo.txt'
+
+with open(DATADIR+flist) as filelist:
         for fname  in filelist:
                 fbase = fname[:-len(EXT)]
                 I = fitsio.read(DATADIR+fname)
