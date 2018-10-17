@@ -181,17 +181,17 @@ with open(DATADIR+'cielo_sep.txt') as filelist:
 	#
 	max_label = np.max(label_image.ravel())
 	for l in range(max_label):
-		ml = np.median(lapmap[label_image == l])
+		ml = np.median(lap[label_image == l])
 		print 'label',l,'median_lap=',ml,
-		if ml < 0.4:
+		if ml < 0.025:
 			print '***'
-			lapmap[label_image == l] = 0
-		elif ml < 0.6:
+			lapmap[label_image == l,0] = 0
+		elif ml < 0.05:
 			print '**'
-			lapmap[label_image == l] = 0
-		elif ml < 0.8:
+			lapmap[label_image == l,0] = 0
+		elif ml < 0.1:
 			print '*'
-			lapmap[label_image == l] = 0
+			lapmap[label_image == l,0] = 0
 		else:
 			print '.' 
         flap   = RESDIR+fbase+"-lapmap-filtered.png"
