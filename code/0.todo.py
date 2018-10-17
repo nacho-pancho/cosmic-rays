@@ -1,7 +1,12 @@
+# -*- coding: UTF-8 -*-
 import fitsio
 import matplotlib.pyplot as plt
 import numpy as np
 from skimage import io
+from skimage.morphology import closing,disk
+from skimage.morphology import remove_small_objects
+from skimage.measure import label
+from skimage.color import label2rgb
 import os
 import pnmgz
 
@@ -41,6 +46,9 @@ DATADIR = '../data/'
 RESDIR = '../results/'
 CMAP = plt.get_cmap('PuRd')
 EXT='.fits'
+NHOOD = disk(1) # para operaciones morfologicas
+
+
 cmd = 'mkdir -p ' + RESDIR + 'cielo'
 print cmd
 os.system(cmd)
@@ -158,8 +166,38 @@ with open(DATADIR+'cielo_sep.txt') as filelist:
         io.imsave(flap,CMAP(lap))
         flap   = RESDIR+fbase+"-lapmap-mask.png"
         lapmap = CMAP(lap)
+	mask = closing(mask,NHOOD)
+	mask  = remove_small_objects(mask,1)
         lapmap[mask==False,0] = 0
         io.imsave(flap,lapmap)
+	
+	label_image = label(mask)
+	label_image_overlay = label2rgb(label_image,image=lapmap)
+        flap   = RESDIR+fbase+"-lapmap-labeling.png"
+        io.imsave(flap,label_image_overlay)
+	#
+	# con el labeling realizado, marcamos como CR todas las zonas que tienen un valor medio de Laplaciano alto
+	# dentro de la zona
+	#
+	max_label = np.max(label_image.ravel())
+	for l in range(max_label):
+		ml = np.median(lapmap[label_image == l])
+		print 'label',l,'median_lap=',ml,
+		if ml < 0.4:
+			print '***'
+			lapmap[label_image == l] = 0
+		elif ml < 0.6:
+			print '**'
+			lapmap[label_image == l] = 0
+		elif ml < 0.8:
+			print '*'
+			lapmap[label_image == l] = 0
+		else:
+			print '.' 
+        flap   = RESDIR+fbase+"-lapmap-filtered.png"
+        io.imsave(flap,lapmap)
+	
+	#
         #
         # la idea es marcar como rayos cósmicos aquellas zonas muy brillantes y que además tienen
         # mucho contraste.
