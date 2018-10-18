@@ -46,15 +46,12 @@ with open(DATADIR+lista) as filelist:
                 # procesamiento
                 #
                 img2 = np.copy(img)
-                base = np.median(dark.ravel())
-                print base
-                img2[mask == 0] = img2[mask == 0] + dark[mask == 0] - base
-                #fitsio.write(DATADIR+"artif/"+fbase+"-"+darkbase+".fits",img2 )
+                offset = np.median(img.ravel())-np.median(dark.ravel())
+                print offset
+                img2[mask == 0] = img2[mask == 0] + (35.0/900.0)*(dark[mask == 0] )
+                img2[mask == 0] = img2[mask == 0] + offset
+                fitsio.write(DATADIR+"artif/"+fbase+"-"+darkbase+".fits",img2 )
                 if d > 0:
-                    #plt.figure()
-                    #plt.imshow(np.log(img-np.min(img)+1),cmap=CMAP)
-                    #plt.figure()
-                    #plt.imshow(np.log(dark-np.min(dark)+1),cmap=CMAP)
                     plt.figure()
                     plt.imshow(np.log(img2-np.min(img2)+1),cmap=CMAP)
                 d = d + 1
