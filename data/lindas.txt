@@ -1,0 +1,3 @@
+cielo/linda3.fits
+cielo/linda1.fits
+cielo/linda2.fits

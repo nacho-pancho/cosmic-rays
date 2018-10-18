@@ -9,6 +9,7 @@ from skimage.measure import label
 from skimage.color import label2rgb
 import os
 import pnmgz
+import sys
 
 #################################################################################################
 
@@ -57,7 +58,12 @@ print cmd
 os.system(cmd)
 k = 0
 plt.close('all')
-with open(DATADIR+'cielo_sep.txt') as filelist:
+if len(sys.argv) > 1:
+    lista = sys.argv[1]
+else:
+    lista = "cielo_sep.txt"
+
+with open(DATADIR+lista) as filelist:
     for fname  in filelist:
         img = fitsio.read(DATADIR+fname).astype(np.double)
         fbase = fname[:-len(EXT)-1]
@@ -147,6 +153,7 @@ with open(DATADIR+'cielo_sep.txt') as filelist:
         #
         # segunda etapa: laplaciano
         #
+        mask = mask.astype(np.bool)
         lap    = condlap(img,mask)
         plt.figure(figsize=(16,12))
         lapnz = lap.ravel()[np.flatnonzero(lap)]

@@ -4,6 +4,7 @@ import numpy as np
 from skimage import io
 import os
 import pnmgz
+import sys
 
 DATADIR = '../data/'
 RESDIR = '../results/'
@@ -16,7 +17,13 @@ print cmd
 os.system(cmd)
 k = 0
 plt.close('all')
-with open(DATADIR+'cielo_sep.txt') as filelist:
+
+if len(sys.argv) > 1:
+    lista = sys.argv[1]
+else:
+    lista = "nacho.txt"
+
+with open(DATADIR+lista) as filelist:
     for fname  in filelist:
         img = fitsio.read(DATADIR+fname).astype(np.double)
         fbase = fname[:-len(EXT)-1]

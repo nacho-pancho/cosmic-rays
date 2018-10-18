@@ -1,0 +1,16 @@
+mkdir -p ../results/cielo
+mkdir -p ../results/dark
+IMAGEN cielo/iaby01kbq_raw EXPTIME= 35.0 CCDGAIN= 1.5
+IMAGEN cielo/iaby01keq_raw EXPTIME= 35.0 CCDGAIN= 1.5
+IMAGEN cielo/iaby01kjq_raw EXPTIME= 35.0 CCDGAIN= 1.5
+IMAGEN cielo/ib5d06gxq_raw EXPTIME= 30.0 CCDGAIN= 1.5
+IMAGEN cielo/ib5d07hkq_raw EXPTIME= 30.0 CCDGAIN= 1.5
+IMAGEN cielo/ib5d12c8q_raw EXPTIME= 30.0 CCDGAIN= 1.5
+IMAGEN cielo/ibla02tgq_raw EXPTIME= 60.0 CCDGAIN= 1.5
+IMAGEN cielo/ibla02tjq_raw EXPTIME= 60.0 CCDGAIN= 1.5
+IMAGEN cielo/ibla02tmq_raw EXPTIME= 60.0 CCDGAIN= 1.5
+IMAGEN cielo/ibu530rzq_raw EXPTIME= 60.0 CCDGAIN= 1.5
+IMAGEN cielo/ibu530tfq_raw EXPTIME= 60.0 CCDGAIN= 1.5
+IMAGEN cielo/ibu540yiq_raw EXPTIME= 60.0 CCDGAIN= 1.5
+IMAGEN cielo/idfr02cgq_raw EXPTIME= 84.0 CCDGAIN= 1.5
+IMAGEN cielo/idfr19wmq_raw EXPTIME= 84.0 CCDGAIN= 1.5

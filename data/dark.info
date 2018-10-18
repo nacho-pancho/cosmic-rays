@@ -1,0 +1,6 @@
+mkdir -p ../results/cielo
+mkdir -p ../results/dark
+IMAGEN dark/ib910irxq_raw EXPTIME= 900.0 CCDGAIN= 1.5
+IMAGEN dark/ib910jyyq_raw EXPTIME= 900.0 CCDGAIN= 1.5
+IMAGEN dark/ib910kxlq_raw EXPTIME= 900.0 CCDGAIN= 1.5
+IMAGEN dark/ib910kxpq_raw EXPTIME= 900.0 CCDGAIN= 1.5
