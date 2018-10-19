@@ -1,3 +1,10 @@
+#
+# En esta etapa se rellenan las zonas marcadas como rayos cósmicos con muestras al azar
+# similares a la distribución empírica observada en el fondo de la imagen.
+#
+# Esto genera una imagen intermedia supuestamente libre de CRs para luego superponerle
+# una imagen de CRs "seguros".
+#
 import fitsio
 import pnm
 import numpy as np

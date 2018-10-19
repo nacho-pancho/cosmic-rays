@@ -1,3 +1,18 @@
+#
+# Este script toma las imágenes "rellenadas" (nacho)
+# y genera una imagen de prueba superponiendo sobre ellas
+# los CRs obtenidos de los darks.
+#
+# Para hacer esto correctamente hay que ajustar los niveles
+# de intensidad de CR de los darks con los de las imagenes "rellenadas",
+# que pueden ser bien distintos.
+#
+# La metodologìa propuesta es tomar la estadística de los CRs ya filtrados
+# en la imagen rellenada, compararla con las estadísticas de los CRs de los darks,
+# y hacer un mapeo lineal de modo que estas últimas sean semejantes a las primeras
+#
+# Ahora lo que se hace es mucho más básico y no creo que sea correcto
+#
 import fitsio
 import matplotlib.pyplot as plt
 import numpy as np
