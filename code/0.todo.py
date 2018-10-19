@@ -121,9 +121,16 @@ with open(DATADIR+lista) as filelist:
         u1 = p50 + (p90-p50)*5 # otro umbral
         u2 = rmean + np.sqrt(rvar)*3 # umbral de deteccion
         u3 = p90
+        #
+        # primera máscara es definida en base a un umbral simple sobre el brillo
+        # la idea es que contenga a todos los CRs, aunque incluya muchos falsos positivos
+        # esto va a ser refinado luego
+        #
+        mask = (img >= u2)
         print 'IMAGEN',fbase2,'p00=',p00,'p10=',p10,'p50=',p50,'p90=',p90,'p100=',p100,'rmean=',rmean,'rvar=',rvar,'u1=',u1,'u2=',u2,
-        mask = (img >= u2).astype(np.double)
         print 'NDET=',np.sum(mask)
+        sorted_roi0 = np.sort(img[mask])
+        np.savez(RESDIR+fbase+'-roi-stats.npz',sorted_roi0)
         out = np.zeros((m,n,3))
         #img = img - p00
         #img = img*(0.99/np.max(img))
@@ -136,8 +143,8 @@ with open(DATADIR+lista) as filelist:
         plt.imshow(out)
         #io.imsave(RESDIR+fbase+"-pseudo.png",out)
         #io.imsave(RESDIR+fbase+"-det.png",mask)
-        pnmgz.imwrite(RESDIR+fbase+"-det0.pbm.gz",mask.astype(np.uint8),1)
-        io.imsave(RESDIR+fbase+"-det0.png",mask)
+        pnmgz.imwrite(RESDIR+fbase+"-mask0.pbm.gz",mask.astype(np.uint8),1)
+        io.imsave(RESDIR+fbase+"-mask0.png",mask)
         #
         # para la etapa posterior, trabajamos con el logaritmo de la imagen
         #
@@ -154,9 +161,15 @@ with open(DATADIR+lista) as filelist:
         fpgmgz  = DATADIR + fbase + "-log.pgm.gz"
         pnmgz.imwrite( fpgmgz, (255.0*nimg).astype(np.uint8), 255 )
         #
-        # segunda etapa: laplaciano
+        # la segunda etapa de detecciòn
+        # està basada en la variación de cáda zona maracada
+        # en la primera etapa. La hipótesis es que los CRs
+        # tienen una variación muy fuerte en toda la zona,
+        # mientras que estrellas u otros objetos celeestes
+        # se ven más difuminados
         #
-        mask = mask.astype(np.bool)
+        # la medida de variación es el valor absoluto del Laplaciano
+        #
         lap    = condlap(img,mask)
         plt.figure(figsize=(16,12))
         lapnz = lap.ravel()[np.flatnonzero(lap)]
@@ -166,7 +179,6 @@ with open(DATADIR+lista) as filelist:
         N = len(slap)
         p90 = slap[N*90/100]
         lap = np.minimum(p90,lap)
-        #lap    = ( 1.0/np.max(lap) )*lap
         lap    = ( 1.0/p90 )*lap
         flap   = DATADIR+fbase+"-lap.pgm.gz"
         pnmgz.imwrite(flap,(255.0*lap).astype(np.uint8),255)
@@ -182,9 +194,9 @@ with open(DATADIR+lista) as filelist:
         io.imsave(flap,lapmap)
 
         label_image = label(mask)
-        label_image_overlay = label2rgb(label_image,image=lapmap)
-        flap   = RESDIR+fbase+"-lapmap-labeling.png"
-        io.imsave(flap,label_image_overlay)
+        #label_image_overlay = label2rgb(label_image,image=lapmap)
+        #flap   = RESDIR+fbase+"-lapmap-labeling.png"
+        #io.imsave(flap,label_image_overlay)
         #
         # con el labeling realizado, marcamos como CR todas las zonas que tienen un valor medio de Laplaciano alto
         # dentro de la zona
