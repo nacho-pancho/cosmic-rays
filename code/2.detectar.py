@@ -144,7 +144,7 @@ with open(DATADIR+lista) as filelist:
         #io.imsave(RESDIR+fbase+"-pseudo.png",out)
         #io.imsave(RESDIR+fbase+"-det.png",mask)
         pnmgz.imwrite(RESDIR+fbase+"-mask0.pbm.gz",mask.astype(np.uint8),1)
-        io.imsave(RESDIR+fbase+"-mask0.png",mask)
+        io.imsave(RESDIR+fbase+"-mask0.png",mask*255)
         #
         # para la etapa posterior, trabajamos con el logaritmo de la imagen
         #
