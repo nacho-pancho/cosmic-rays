@@ -1,84 +1,148 @@
-#include "filtros.h"
+#include <Python.h>
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/arrayobject.h>
 #include <math.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <limits.h>
-/**
- * Tipos de imagen representadas
- */
-typedef enum tipo_imagen {
-  GRISES=1,
-  COLOR=2
-} TipoImagen;
+#include <omp.h>
 
-/**
- * Canales de color
- */
-typedef enum canal {
-  ROJO=0,
-  VERDE=1,
-  AZUL=2
-} Canal;
+///
+/// Contains all the relevant parameters  about the patch decomposition procedure.
+///
+#define CCLIP(x,a,b) ( (x) > (a) ? ( (x) < (b) ? (x) : (b) ) : (a) )
+#define UCLIP(x,a) ( (x) < (a) ? (x) : (a)-1 )
 
-/**
- * pixel es un entero sin signo de al menos 32 bits
- */
-typedef unsigned int Pixel;
-
-typedef struct imagen {
-  TipoImagen tipo;
-  int ancho;
-  int alto;
-  int valor_maximo;
-  Pixel* pixels;
-} Imagen;
+/// Python adaptors
+static PyObject *histogram            (PyObject* self, PyObject* args);
+static PyObject *roilap               (PyObject *self, PyObject *args); 
+static PyObject *roiscore             (PyObject *self, PyObject *args); 
+static PyObject *label                (PyObject *self, PyObject *args); 
 
 
-#define MAXW 10
-
-int clip(int i, int min, int max) {
-  return  i <= min ? min : (i >= max ? max : i);
+/*****************************************************************************
+ * Python/NumPy -- C boilerplate
+ *****************************************************************************/
+//
+//--------------------------------------------------------
+// function declarations
+//--------------------------------------------------------
+//
+static PyMethodDef methods[] = {
+  { "histogram", imghist, METH_VARARGS, "Fast histogram for images."},
+  { "roilap", roilap, METH_VARARGS, "Compute Laplacian within each ROI ."},
+  { "roiscore", roiscore, METH_VARARGS, "Assign CR score to each ROI"},
+  { "label", label, METH_VARARGS, "Image labeling"},
+  { NULL, NULL, 0, NULL } /* Sentinel */
+};
+//
+//--------------------------------------------------------
+// module initialization
+//--------------------------------------------------------
+//
+PyMODINIT_FUNC initcrstats(void) {
+  (void) Py_InitModule("crstats", methods);
+  import_array();
+}
+//
+//--------------------------------------------------------
+// imghist
+//--------------------------------------------------------
+//
+static PyObject *imghist(PyObject *self, PyObject *args) {
+  PyArrayObject *py_P;
+  npy_int64 M, N, w, s;
+  // Parse arguments: image
+  if(!PyArg_ParseTuple(args, "O!",
+                       &w,
+                       &s
+		       )) {
+    return NULL;
+  }
+  //py_P = (PyArrayObject*) PyArray_SimpleNew(2,&dims[0],NPY_DOUBLE); 
+  return PyArray_Return(py_P);
 }
 
-/*------------------------------------------------------------------------*/
-
-void bordes(Pixel pixels_in[], int ancho, int alto, int max_val, int orient, Pixel pixels_out[]) 
-{
-  int i,j,i2,j2;
-  int pder,pizq,pabj,parr,dx,dy;
-  for (i = 0; i < alto ; ++i) {
-    for (j = 0 ; j < ancho; ++j) {
-	j2 = clip(j + 1, 0, ancho-1 );	
-	pder = pixels_in[i*ancho+j2];
-	j2 = clip(j - 1, 0, ancho-1 );	
-	pizq = pixels_in[i*ancho+j2];
-	i2 = clip(i - 1, 0, alto-1 );
-	parr = pixels_in[i2*ancho+j];
-	i2 = clip(i + 1, 0, alto-1 );
-	pabj = pixels_in[i2*ancho+j];
-	dx = pder-pizq;
-        dy = pabj-parr;
-	pixels_out[i*ancho+j]  = clip((int)(sqrt((double)(dx*dx+dy*dy))+0.5),0,max_val);
+//
+//--------------------------------------------------------
+// roilap
+//--------------------------------------------------------
+//
+static PyObject *roilap(PyObject *self, PyObject *args) {
+  PyArrayObject *py_I, *py_P;
+  npy_int64 M, N, w, s;
+  // Parse arguments. 
+  if(!PyArg_ParseTuple(args, "O!O!",
+		       &PyArray_Type, &py_I, &w, &s)) {
+    return NULL;
+  }
+#if 0
+  py_P = (PyArrayObject*) PyArray_SimpleNew(2,dims,NPY_DOUBLE); 
+  //
+  // copy padded image
+  //
+  for (npy_int64 i = 0; i < M2; i++) {
+    for (npy_int64 j = 0; j < N2; j++) {
+      *((npy_double*)PyArray_GETPTR2(py_P,i,j)) = *(npy_double*)PyArray_GETPTR2(py_I, UCLIP(i,M), UCLIP(j,N) );
     }
   }
+  return PyArray_Return(py_P);  
+#endif
 }
 
-/*------------------------------------------------------------------------*/
-void reemplazar_etiqueta(Imagen* pI, Pixel a, Pixel b, int maxi) {
-  const int n = pI->ancho* pI->alto;  
-  register int i;
-  Pixel *pi = pI->pixels;
-  if ((maxi > n) || (maxi == 0))
-    maxi = n;
-  for (i = 0; i < maxi; i++) {
-    if (pi[i] == a) 
-      pi[i] = b;
-  }
+//
+//--------------------------------------------------------
+// roiscore
+//--------------------------------------------------------
+//
+static PyObject *roiscore(PyObject *self, PyObject *args) {
+  PyArrayObject *py_P, *py_I, *py_R;
+  npy_int64 M, N, w, s;
+  // Parse arguments: input image, input ROI labeling, output score for each ROI
+  if(!PyArg_ParseTuple(args, "O!O!O!",
+                       &PyArray_Type, &py_P,
+                       &PyArray_Type, &py_R)) {
+    return NULL;
+ }
+#if 0
+  py_I = (PyArrayObject*) PyArray_SimpleNew(2,dims,NPY_DOUBLE); 
+  PyArray_FILLWBYTE(py_I,0);
+  _stitch_(py_P,&map,py_I,py_R);
+  return PyArray_Return(py_I);  
+#endif
 }
 
-/*------------------------------------------------------------------------*/
-void reemplazar_etiqueta2(Imagen* pI, Pixel a, Pixel b, int maxp) {
-  const int N = pI->ancho;
+
+
+//
+//--------------------------------------------------------
+// labeling
+//--------------------------------------------------------
+//
+static void _replace_label_(PyArray* pI, npy_intp a, npy_intp b, npy_intp maxp);
+static void _replace_label_(PyArray* pI, Pixel a, Pixel b, int maxp);
+static void _label_(const PyArray* pM, Imagen* pL);
+
+static PyObject *label(PyObject *self, PyObject *args) {
+  PyArrayObject *py_P, *py_I, *py_R;
+  npy_int64 M, N, w, s;
+  // Parse arguments: input mask, output labeling
+  if(!PyArg_ParseTuple(args, "O!O!",
+                       &PyArray_Type, &py_P,
+                       &PyArray_Type, &py_R)) {
+    return NULL;
+ }
+#if 0
+  py_I = (PyArrayObject*) PyArray_SimpleNew(2,dims,NPY_DOUBLE); 
+  PyArray_FILLWBYTE(py_I,0);
+  _stitch_(py_P,&map,py_I,py_R);
+  return PyArray_Return(py_I);  
+#endif
+}
+
+//--------------------------------------------------------
+
+void _replace_label_(PyArray* pI, npy_intp a, npy_intp b, npy_intp maxp) {
+#if 0 
+// arreglar para PyArray
+      	const int N = pI->ancho;
   const int M = pI->alto;  
   Pixel *pi = pI->pixels;
   register int i,j,k,ult_reemplazo = maxp;
@@ -102,12 +166,13 @@ void reemplazar_etiqueta2(Imagen* pI, Pixel a, Pixel b, int maxp) {
       break;
     }
   }
+#endif
 }
 
 /*------------------------------------------------------------------------*/
 
-
-void etiquetar(const Imagen* pG, int u, Imagen* pE) {
+void _label_(const PyArray* pM, Imagen* pL) {
+#if 0
   const int ancho = pG->ancho;
   const int alto  = pG->alto;
   register int i,j,k;
@@ -118,7 +183,7 @@ void etiquetar(const Imagen* pG, int u, Imagen* pE) {
   for (k = 0, i = 0; i < alto; ++i) {
     /* printf("%6d/%6d L=%6d\n",i,alto,L); */
     for (j = 0; j < ancho; ++j, ++k) {
-      if (pg[k] > u) { /* estrictamente mayor segun letra */
+      if (pg[k] > u) { 
 	pe[k] = 0;
 	continue;
       }
@@ -143,7 +208,8 @@ void etiquetar(const Imagen* pG, int u, Imagen* pE) {
     } /* j: dentro de cada fila */
   } /* i: para cada fila */
   pE->valor_maximo = L;
+#endif
 }
 
-/*------------------------------------------------------------------------*/
+
 
