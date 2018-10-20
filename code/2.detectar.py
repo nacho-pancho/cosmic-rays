@@ -12,7 +12,9 @@ import pnmgz
 import sys
 
 #################################################################################################
-
+#
+# CRITICO: pasar a C
+#
 def condlap(img,mask):
     m,n = img.shape
     #
@@ -151,6 +153,9 @@ with open(DATADIR+lista) as filelist:
         img     = np.log2(img)
         plt.close('all')
         plt.figure( k, figsize=(16,12) )
+        # 
+        # CRITICO: pasar a C
+        #
         h,b = np.histogram( img.ravel()[np.flatnonzero(img)],bins=20)
         plt.semilogy( b[1:],h,'*-' )
         plt.savefig(RESDIR + fbase + "-log-hist.png")
@@ -204,6 +209,9 @@ with open(DATADIR+lista) as filelist:
         max_label = np.max(label_image.ravel())
         ndet = 0
         ntot = max_label
+        #
+        # CRITICO!! PASAR A C
+        #
         for l in range(max_label):
             ml = np.median(lap[label_image == l])
             if ml < 0.1:
