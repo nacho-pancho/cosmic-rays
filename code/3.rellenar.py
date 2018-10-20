@@ -1,4 +1,6 @@
 #
+# -*- coding: UTF-8 -*-
+#
 # En esta etapa se rellenan las zonas marcadas como rayos cósmicos con muestras al azar
 # similares a la distribución empírica observada en el fondo de la imagen.
 #

@@ -1,3 +1,6 @@
+#
+# -*- coding: UTF-8 -*-
+#
 import fitsio
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,7 +24,7 @@ plt.close('all')
 if len(sys.argv) > 1:
     lista = sys.argv[1]
 else:
-    lista = "nacho.txt"
+    lista = "cielo_sep.txt"
 
 with open(DATADIR+lista) as filelist:
     for fname  in filelist:
@@ -77,26 +80,36 @@ with open(DATADIR+lista) as filelist:
         rmean = colstats[5,n/2]
         rvar  = colstats[6,n/2]
         u1 = p50 + (p90-p50)*5 # otro umbral
-        u2 = rmean + np.sqrt(rvar)*5 # umbral de deteccion
+        u2 = rmean + np.sqrt(rvar)*3 # umbral de deteccion
 
-        print 'IMAGEN',fbase2,'p00=',p00,'p10=',p10,'p50=',p50,'p90=',p90,'p100=',p100,'rmean=',rmean,'rvar=',rvar,'u1=',u1,'u2=',u2
-        mask = (img >= u1).astype(np.double)
-        pnmgz.imwrite(RESDIR+fbase+"-det0.pbm.gz",mask.astype(np.uint8),1)
-        io.imsave(RESDIR+fbase+"-det0.png",mask)
+        #
+        # primera máscara es definida en base a un umbral simple sobre el brillo
+        # la idea es que contenga a todos los CRs, aunque incluya muchos falsos positivos
+        # esto va a ser refinado luego
+        #
+        mask = (img >= u2)
+        pnmgz.imwrite(RESDIR+fbase+"-mask0.pbm.gz",mask.astype(np.uint8),1)
+        io.imsave(RESDIR+fbase+"-mask0.png",mask)
+        #
+        # además generamos estadísticas de las zonas marcadas como candidatas
+        #
+        sorted_roi0 = np.sort(img[mask])
+        np.savez(RESDIR+fbase+'-roi-stats.npz',sorted_roi0)
         #
         # para la etapa posterior, trabajamos con el logaritmo de la imagen
         #
-	img     = np.log2(img)
-	plt.close('all')
-	plt.figure( k, figsize=(16,12) )
-	h,b = np.histogram( img.ravel()[np.flatnonzero(img)],bins=20)
-	plt.semilogy( b[1:],h,'*-' )
-	plt.savefig(RESDIR + fbase + "-log-hist.png")
+        print 'IMAGEN', fbase2, 'p00=', p00, 'p10=', p10, 'p50=', p50, 'p90=', p90, 'p100=', p100, 'rmean=', rmean, 'rvar=', rvar, 'u1=', u1, 'u2=', u2,'NDET=',np.sum(mask)
+        img     = np.log2(img)
+        plt.close('all')
+        plt.figure( k, figsize=(16,12) )
+        h,b = np.histogram( img.ravel()[np.flatnonzero(img)],bins=20)
+        plt.semilogy( b[1:],h,'*-' )
+        plt.savefig(RESDIR + fbase + "-log-hist.png")
         nimg = img - np.min(img)
         nimg     = nimg*( 1.0 / np.max(nimg) )
         fpseudo = RESDIR + fbase + "-log.png"
-	io.imsave( fpseudo, plt.get_cmap('hot')(nimg) )
- 	fpgmgz  = DATADIR + fbase + "-log.pgm.gz"
+        io.imsave( fpseudo, plt.get_cmap('hot')(nimg) )
+        fpgmgz  = DATADIR + fbase + "-log.pgm.gz"
         pnmgz.imwrite( fpgmgz, (255.0*nimg).astype(np.uint8), 255 )
         #
         k = k + 1
