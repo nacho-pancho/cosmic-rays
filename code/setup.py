@@ -11,7 +11,7 @@ setup(name             = "crimg",
       url              = "https://iie.fing.edu.uy/personal/nacho/",
       ext_modules      = [
           Extension(
-              'crimg', ['src/crimg.c'],
+              'crimg', ['c_src/crimg.c'],
               libraries = ['gomp'],
               extra_compile_args=["-Wall", "-fopenmp", "-O3", "-march=native", "-mtune=native"]),
      ], 

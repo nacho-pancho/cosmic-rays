@@ -11,7 +11,7 @@
 #define UCLIP(x,a) ( (x) < (a) ? (x) : (a)-1 )
 
 /// Python adaptors
-static PyObject *histogram            (PyObject* self, PyObject* args);
+static PyObject *imghist              (PyObject* self, PyObject* args);
 static PyObject *roilap               (PyObject *self, PyObject *args); 
 static PyObject *roiscore             (PyObject *self, PyObject *args); 
 static PyObject *label                (PyObject *self, PyObject *args); 
@@ -116,9 +116,9 @@ static PyObject *roiscore(PyObject *self, PyObject *args) {
 // labeling
 //--------------------------------------------------------
 //
-static void _replace_label_(PyArray* pI, npy_intp a, npy_intp b, npy_intp maxp);
-static void _replace_label_(PyArray* pI, Pixel a, Pixel b, int maxp);
-static void _label_(const PyArray* pM, Imagen* pL);
+static void _replace_label_(PyArrayObject* pI, npy_intp a, npy_intp b, npy_intp maxp);
+static void _replace_label_(PyArrayObject* pI, npy_intp a, npy_intp b, npy_intp maxp);
+static void _label_(const PyArrayObject* pM, PyArrayObject* pL);
 
 static PyObject *label(PyObject *self, PyObject *args) {
   PyArrayObject *py_P, *py_I, *py_R;
@@ -139,12 +139,12 @@ static PyObject *label(PyObject *self, PyObject *args) {
 
 //--------------------------------------------------------
 
-void _replace_label_(PyArray* pI, npy_intp a, npy_intp b, npy_intp maxp) {
+void _replace_label_(PyArrayObject* pI, npy_intp a, npy_intp b, npy_intp maxp) {
 #if 0 
 // arreglar para PyArray
       	const int N = pI->ancho;
   const int M = pI->alto;  
-  Pixel *pi = pI->pixels;
+  npy_intp *pi = pI->pixels;
   register int i,j,k,ult_reemplazo = maxp;
   if ((maxp >= M*N) || (maxp == 0))
     maxp = M*N-1;
@@ -171,14 +171,14 @@ void _replace_label_(PyArray* pI, npy_intp a, npy_intp b, npy_intp maxp) {
 
 /*------------------------------------------------------------------------*/
 
-void _label_(const PyArray* pM, Imagen* pL) {
+void _label_(const PyArrayObject* pM, PyArrayObject* pL) {
 #if 0
   const int ancho = pG->ancho;
   const int alto  = pG->alto;
   register int i,j,k;
-  const Pixel *pg = pG->pixels;
-  Pixel *pe = pE->pixels;
-  Pixel *pen = pE->pixels - ancho; /* fila anterior */
+  const npy_intp *pg = pG->pixels;
+  npy_intp *pe = pE->pixels;
+  npy_intp *pen = pE->pixels - ancho; /* fila anterior */
   int L = 0; /* etiqueta */
   for (k = 0, i = 0; i < alto; ++i) {
     /* printf("%6d/%6d L=%6d\n",i,alto,L); */
