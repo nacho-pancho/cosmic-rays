@@ -11,9 +11,9 @@
 #define UCLIP(x,a) ( (x) < (a) ? (x) : (a)-1 )
 
 /// Python adaptors
-static PyObject *imghist              (PyObject* self, PyObject* args);
-static PyObject *roilap               (PyObject *self, PyObject *args); 
-static PyObject *roiscore             (PyObject *self, PyObject *args); 
+static PyObject *discrete_histogram              (PyObject* self, PyObject* args);
+static PyObject *mask_laplacian               (PyObject *self, PyObject *args); 
+static PyObject *mask_refine             (PyObject *self, PyObject *args); 
 static PyObject *label                (PyObject *self, PyObject *args); 
 
 
@@ -26,9 +26,9 @@ static PyObject *label                (PyObject *self, PyObject *args);
 //--------------------------------------------------------
 //
 static PyMethodDef methods[] = {
-  { "imghist", imghist, METH_VARARGS, "Fast histogram for images."},
-  { "roilap", roilap, METH_VARARGS, "Compute Laplacian within each ROI ."},
-  { "roiscore", roiscore, METH_VARARGS, "Assign CR score to each ROI"},
+  { "discrete_histogram", discrete_histogram, METH_VARARGS, "Fast histogram for images."},
+  { "mask_laplacian", mask_laplacian, METH_VARARGS, "Compute Laplacian within each ROI ."},
+  { "mask_refine", mask_refine, METH_VARARGS, "Assign CR score to each ROI"},
   { "label", label, METH_VARARGS, "Image labeling"},
   { NULL, NULL, 0, NULL } /* Sentinel */
 };
@@ -43,10 +43,10 @@ PyMODINIT_FUNC initcrimg(void) {
 }
 //
 //--------------------------------------------------------
-// imghist
+// discrete_histogram
 //--------------------------------------------------------
 //
-static PyObject *imghist(PyObject *self, PyObject *args) {
+static PyObject *discrete_histogram(PyObject *self, PyObject *args) {
   PyArrayObject *py_I, *py_H;
   // Parse arguments: image
   if(!PyArg_ParseTuple(args, "O!",
@@ -102,154 +102,151 @@ static PyObject *imghist(PyObject *self, PyObject *args) {
 
 //
 //--------------------------------------------------------
-// roilap
+// mask_laplacian
 //--------------------------------------------------------
 //
-static PyObject *roilap(PyObject *self, PyObject *args) {
-  PyArrayObject *py_I, *py_P;
-  npy_int64 M, N, w, s;
-  // Parse arguments. 
+// Receives an image, a ROI mask and replaces it in-place with
+// the absolute value of the Laplacian
+//
+//
+static void _mask_laplacian_(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
+
+static PyObject *mask_laplacian(PyObject *self, PyObject *args) {
+  PyArrayObject *py_I, *py_M, *py_L;
   if(!PyArg_ParseTuple(args, "O!O!",
-		       &PyArray_Type, &py_I, &w, &s)) {
+		       &PyArray_Type, &py_I,
+		       &PyArray_Type, &py_M)) {
     return NULL;
   }
-#if 0
-  py_P = (PyArrayObject*) PyArray_SimpleNew(2,dims,NPY_DOUBLE); 
-  //
-  // copy padded image
-  //
-  for (npy_int64 i = 0; i < M2; i++) {
-    for (npy_int64 j = 0; j < N2; j++) {
-      *((npy_double*)PyArray_GETPTR2(py_P,i,j)) = *(npy_double*)PyArray_GETPTR2(py_I, UCLIP(i,M), UCLIP(j,N) );
-    }
-  }
-  return PyArray_Return(py_P);  
-#endif
+  py_L = (PyArrayObject*) PyArray_SimpleNew(2,PyArray_DIMS(py_I),NPY_UINT16);
+  _mask_laplacian_(py_I,py_M,py_L);
+  return PyArray_Return(py_L);  
+}
+
+static void _mask_laplacian_(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L) {
 }
 
 //
 //--------------------------------------------------------
-// roiscore
+// mask_refine
 //--------------------------------------------------------
 //
-static PyObject *roiscore(PyObject *self, PyObject *args) {
-  PyArrayObject *py_P, *py_I, *py_R;
-  npy_int64 M, N, w, s;
-  // Parse arguments: input image, input ROI labeling, output score for each ROI
+static void  _mask_refine_(PyArrayObject*, PyArrayObject*, PyArrayObject*);
+
+static PyObject *mask_refine(PyObject *self, PyObject *args) {
+  PyArrayObject *py_Lab, *py_Lap, *py_Mask;
+  // Parse arguments: input label image, input laplacian of masks, output refined mask
   if(!PyArg_ParseTuple(args, "O!O!O!",
-                       &PyArray_Type, &py_P,
-                       &PyArray_Type, &py_R)) {
+                       &PyArray_Type, &py_Lab,
+                       &PyArray_Type, &py_Lap)) {
     return NULL;
  }
-#if 0
-  py_I = (PyArrayObject*) PyArray_SimpleNew(2,dims,NPY_DOUBLE); 
-  PyArray_FILLWBYTE(py_I,0);
-  _stitch_(py_P,&map,py_I,py_R);
-  return PyArray_Return(py_I);  
-#endif
+  py_Mask = (PyArrayObject*) PyArray_SimpleNew(2,PyArray_DIMS(py_Lab),NPY_UINT8); 
+  PyArray_FILLWBYTE(py_Mask,0);
+  _mask_refine_(py_Lab,py_Lap,py_Mask);
+  return PyArray_Return(py_Mask);  
 }
 
-
+static void  _mask_refine_(PyArrayObject* py_Lab,
+			   PyArrayObject* py_Lap,
+			   PyArrayObject* py_Mask) {
+}
 
 //
 //--------------------------------------------------------
 // labeling
 //--------------------------------------------------------
 //
-static void _replace_label_(PyArrayObject* pI, npy_intp a, npy_intp b, npy_intp maxp);
-static void _replace_label_(PyArrayObject* pI, npy_intp a, npy_intp b, npy_intp maxp);
-static void _label_(const PyArrayObject* pM, PyArrayObject* pL);
+static void _replace_label_(PyArrayObject* pL, npy_intp a, npy_intp b, npy_intp lasti, npy_intp lastj);
+//static void _compact_label_(PyArrayObject* pL);
+static void _label_(PyArrayObject* pM, PyArrayObject* pL);
 
 static PyObject *label(PyObject *self, PyObject *args) {
-  PyArrayObject *py_P, *py_I, *py_R;
-  npy_int64 M, N, w, s;
-  // Parse arguments: input mask, output labeling
-  if(!PyArg_ParseTuple(args, "O!O!",
-                       &PyArray_Type, &py_P,
-                       &PyArray_Type, &py_R)) {
+  PyArrayObject *py_M, *py_L;
+  // Parse arguments: input mask
+  if(!PyArg_ParseTuple(args, "O!",
+                       &PyArray_Type, &py_M)) {
     return NULL;
  }
-#if 0
-  py_I = (PyArrayObject*) PyArray_SimpleNew(2,dims,NPY_DOUBLE); 
-  PyArray_FILLWBYTE(py_I,0);
-  _stitch_(py_P,&map,py_I,py_R);
-  return PyArray_Return(py_I);  
-#endif
-}
-
-//--------------------------------------------------------
-
-void _replace_label_(PyArrayObject* pI, npy_intp a, npy_intp b, npy_intp maxp) {
-#if 0 
-// arreglar para PyArray
-      	const int N = pI->ancho;
-  const int M = pI->alto;  
-  npy_intp *pi = pI->pixels;
-  register int i,j,k,ult_reemplazo = maxp;
-  if ((maxp >= M*N) || (maxp == 0))
-    maxp = M*N-1;
-  i = maxp / N;
-  j = maxp % N;
-  k = maxp;
-  while ( i >= 0 ) {
-    while ( j >= 0 ) {
-      if (pi[k] == a) {
-	pi[k] = b;
-	ult_reemplazo = k;
-      }
-      j--;
-      k--;
-    }
-    j = N-1;
-    i--;
-    if ((ult_reemplazo - k) > pI->ancho) {
-      break;
-    }
-  }
-#endif
+  py_L = (PyArrayObject*) PyArray_SimpleNew(2,PyArray_DIMS(py_M),NPY_UINT64); 
+  PyArray_FILLWBYTE(py_L,0);
+  _label_(py_M,py_L);
+  return PyArray_Return(py_L);  
 }
 
 /*------------------------------------------------------------------------*/
 
-void _label_(const PyArrayObject* pM, PyArrayObject* pL) {
-#if 0
-  const int ancho = pG->ancho;
-  const int alto  = pG->alto;
-  register int i,j,k;
-  const npy_intp *pg = pG->pixels;
-  npy_intp *pe = pE->pixels;
-  npy_intp *pen = pE->pixels - ancho; /* fila anterior */
-  int L = 0; /* etiqueta */
-  for (k = 0, i = 0; i < alto; ++i) {
-    /* printf("%6d/%6d L=%6d\n",i,alto,L); */
-    for (j = 0; j < ancho; ++j, ++k) {
-      if (pg[k] > u) { 
-	pe[k] = 0;
+void _label_(PyArrayObject* pM, PyArrayObject* pL) {
+  const npy_intp hsize = PyArray_DIM(pM,1);
+  const npy_intp vsize = PyArray_DIM(pM,0);
+  const npy_intp mask_vstride = PyArray_STRIDE(pM,0);
+  const npy_intp label_vstride = PyArray_STRIDE(pL,0);
+  
+  const npy_uint8 *mask_row = PyArray_DATA(pM);
+  npy_uint32 *label_data = PyArray_DATA(pL);
+  npy_uint32 *label_row = label_data;
+  npy_uint32 *label_prev_row = label_row - label_vstride;
+  
+  int L = 1; // current label number
+  register int i,j;
+  for (i = 0; i < vsize; ++i, label_row += label_vstride, label_prev_row += label_vstride, mask_row += mask_vstride) {
+    for (j = 0; j < hsize; ++j) {
+      if (! mask_row[j]) {
 	continue;
       }
-      int n = (i > 0) ? pen[k] : 0;
-      int w = (j > 0) ? pe[k-1] : 0;
-      if (n == 0) {
-	if (w == 0) { /* ambos borde */
-	  pe[k] = ++L; /* nueva etiqueta */
-	} else { /* oeste no era borde */
-	  pe[k] = w;
+      
+      int Ln = (i > 0) ? label_prev_row[j] : 0; // mask value to the north
+      int Lw = (j > 0) ? label_row[j-1] : 0; // mask value to the west
+      if (Ln == 0) {
+	if (Lw == 0) { // no ROI to either north or west
+	  label_row[j] = L++; // create new (tentative) label at this point
+	} else {  // ROI to the west
+	  label_row[j] = Lw;
 	}	
-      } else { /* n no es borde */
-	if (w == 0) {
-	  pe[k] = n;
-	}  else { /* etiquetas distintas */
-	  pe[k] = w;
-	  if (n != w) {
-	    reemplazar_etiqueta2(pE,n,w,k); 
+      } else { // ROI to the north
+	if (Lw == 0) { // no ROI to the west; propagate northern one
+	  label_row[j] = Ln;
+	}  else { 
+	  label_row[j] = Lw; 
+	  if (Ln != Lw) { // different labels to N and W! Resolve 
+	    _replace_label_(pL,Ln,Lw,i,j); 
 	  }
 	}
       } 
     } /* j: dentro de cada fila */
   } /* i: para cada fila */
-  pE->valor_maximo = L;
-#endif
+}
+
+//--------------------------------------------------------
+
+void _replace_label_(PyArrayObject* pL, npy_intp a, npy_intp b, npy_intp lasti, npy_intp lastj) {
+  const npy_intp hsize = PyArray_DIM(pL,1);
+  const npy_intp label_vstride = PyArray_STRIDE(pL,0);
+  npy_uint32 *label_data = PyArray_DATA(pL);
+  npy_uint32 *label_row = label_data;
+
+  register int i,j;
+  i = lasti;
+  
+  for (i = lasti;  i >= 0; i--, label_row -= label_vstride ) {
+    char any_replacement_in_this_row = 0;
+    for (j = hsize-1 ; j >= 0; j-- ) {
+      if (label_row[j] == a) {
+	label_row[j] = b;
+	any_replacement_in_this_row = 1;
+      }
+    }
+    if (!any_replacement_in_this_row)
+      break;
+  } 
 }
 
 
+//--------------------------------------------------------
+//
+// if region merging occurs, the final labels are not consecutive
+// here we re-label the image so that labels are consecutive
+//
+//void _compact_label_(PyArrayObject* pL) {
+//}
 
