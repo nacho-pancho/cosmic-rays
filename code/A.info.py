@@ -35,4 +35,6 @@ with open(DATADIR+lista) as filelist:
         print 'IMAGEN',fbase,
         print 'EXPTIME=',hdr['EXPTIME'],
         print 'CCDGAIN=',hdr['CCDGAIN']
+        for field in hdr:
+            print 'Field=',field," Val=",hdr[field]
         k = k + 1

@@ -26,7 +26,7 @@ static PyObject *label                (PyObject *self, PyObject *args);
 //--------------------------------------------------------
 //
 static PyMethodDef methods[] = {
-  { "histogram", imghist, METH_VARARGS, "Fast histogram for images."},
+  { "imghist", imghist, METH_VARARGS, "Fast histogram for images."},
   { "roilap", roilap, METH_VARARGS, "Compute Laplacian within each ROI ."},
   { "roiscore", roiscore, METH_VARARGS, "Assign CR score to each ROI"},
   { "label", label, METH_VARARGS, "Image labeling"},
@@ -37,8 +37,8 @@ static PyMethodDef methods[] = {
 // module initialization
 //--------------------------------------------------------
 //
-PyMODINIT_FUNC initcrstats(void) {
-  (void) Py_InitModule("crstats", methods);
+PyMODINIT_FUNC initcrimg(void) {
+  (void) Py_InitModule("crimg", methods);
   import_array();
 }
 //
@@ -47,17 +47,57 @@ PyMODINIT_FUNC initcrstats(void) {
 //--------------------------------------------------------
 //
 static PyObject *imghist(PyObject *self, PyObject *args) {
-  PyArrayObject *py_P;
-  npy_int64 M, N, w, s;
+  PyArrayObject *py_I, *py_H;
   // Parse arguments: image
   if(!PyArg_ParseTuple(args, "O!",
-                       &w,
-                       &s
+                       &PyArray_Type,
+                       &py_I
 		       )) {
     return NULL;
   }
-  //py_P = (PyArrayObject*) PyArray_SimpleNew(2,&dims[0],NPY_DOUBLE); 
-  return PyArray_Return(py_P);
+  const PyArray_Descr* desc = PyArray_DESCR(py_I);
+  if (desc->kind != 'u') {
+    PyErr_Warn(PyExc_Warning,"Data type must be 8 or 16 bit unsigned integer.");
+    return NULL;
+  }
+  const char typecode = desc->type_num;
+  // histograms for 8 or 16 bit integers; larger integers are squashed down
+  npy_intp dim;
+  switch (typecode) {
+  case NPY_UINT8: case NPY_BOOL:
+    dim = 1<<8;
+    break;
+  case NPY_UINT16:
+    dim = 1<< 16;
+      break;
+  default:
+      PyErr_Warn(PyExc_Warning,"Only 8 or 16 bit integers allowed.");
+      return NULL;
+  }
+  py_H = (PyArrayObject*) PyArray_SimpleNew(1,&dim,NPY_INT64);
+  //
+  // fill in the histogram
+  //
+  PyArray_FILLWBYTE(py_H,0);
+  PyArrayIterObject *iter = (PyArrayIterObject *)PyArray_IterNew((PyObject*)py_I);
+  if (iter == NULL) {
+    PyErr_Warn(PyExc_Warning,"Failed creating iterator??.");
+    return NULL;
+  }
+  if (typecode == NPY_UINT16) { 
+    while (PyArray_ITER_NOTDONE(iter)) {
+      const npy_intp x = *((npy_uint16*)PyArray_ITER_DATA(iter));
+      (*(npy_int64*)PyArray_GETPTR1(py_H, x))++;
+      PyArray_ITER_NEXT(iter);
+    }
+  } else {
+    while (PyArray_ITER_NOTDONE(iter)) {
+      const npy_intp x = *((npy_uint8*)PyArray_ITER_DATA(iter));
+      (*(npy_int64*)PyArray_GETPTR1(py_H, x))++;
+      PyArray_ITER_NEXT(iter);
+    }
+  }
+  return PyArray_Return(py_H);
 }
 
 //
