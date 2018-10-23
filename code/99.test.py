@@ -40,21 +40,25 @@ with open(DATADIR+lista) as filelist:
         #plt.figure(1)
         #plt.semilogy(hist)
         img = np.maximum(img - med,0)
-        limg = crimg.discrete_log2rootk(img,2)
+        #limg = crimg.discrete_log2rootk(img,2)
+        limg = np.round(16.0*np.log2(img.astype(np.double))).astype(np.uint8)
         print np.unique(limg),
         hist = crimg.discrete_histogram(limg)
         chist = np.cumsum(hist)
         med = np.flatnonzero(chist > N/2)[0]
         print 'median=',med
         plt.figure(1,figsize=(10,10))
-        io.imsave(fname[(fname.rfind('/')+1):-1]+'.log.png',limg*4)
-        mask = (limg > (med+2)) # great threshold!
+        io.imsave(fname[(fname.rfind('/')+1):-1]+'.log.png',limg)
+        mask = (limg > (med+12)) # great threshold!
         io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask.png',mask*255)
         plt.figure(2,figsize=(10,10))
         plt.semilogy(hist,'*-')
         plt.figure(3,figsize=(10,10))
         plt.semilogy(chist,'*-')
         label = crimg.label(mask)
-        io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask.png',mask*255)
+        print np.max(label)
+        label = label.astype(np.double)*(1.0/np.max(label))
+	cmap = plt.get_cmap('hot')
+        io.imsave(fname[(fname.rfind('/')+1):-1]+'.label.png',cmap(label))
         k = k + 1
 plt.show()

@@ -290,6 +290,7 @@ static void  _mask_refine_(PyArrayObject* py_Lab,
 //--------------------------------------------------------
 //
 static void _replace_label_(PyArrayObject* pL, npy_intp a, npy_intp b, npy_intp lasti, npy_intp lastj);
+
 //static void _compact_label_(PyArrayObject* pL);
 static void _label_(PyArrayObject* pM, PyArrayObject* pL);
 
@@ -300,6 +301,7 @@ static PyObject *label(PyObject *self, PyObject *args) {
                        &PyArray_Type, &py_M)) {
     return NULL;
  }
+  // PENDING: check that mask is bool!
   py_L = (PyArrayObject*) PyArray_SimpleNew(2,PyArray_DIMS(py_M),NPY_UINT32); 
   PyArray_FILLWBYTE(py_L,0);
   _label_(py_M,py_L);
@@ -355,14 +357,12 @@ void _replace_label_(PyArrayObject* pL, npy_intp a, npy_intp b, npy_intp lasti, 
   const npy_intp hsize = PyArray_DIM(pL,1);
   const npy_intp label_vstride = PyArray_STRIDE(pL,0)/4;
   npy_uint32 *label_data = PyArray_DATA(pL);
-  npy_uint32 *label_row = label_data;
+  npy_uint32 *label_row = label_data+ label_vstride*lasti;
 
-  register int i,j;
-  i = lasti;
-  
-  for (i = lasti;  i >= 0; i--, label_row -= label_vstride ) {
+  npy_intp i,j;
+  for (i = lasti; i; i--, label_row -= label_vstride ) {
     char any_replacement_in_this_row = 0;
-    for (j = hsize-1 ; j >= 0; j-- ) {
+    for (j = hsize-1 ; j ; j-- ) {
       if (label_row[j] == a) {
 	label_row[j] = b;
 	any_replacement_in_this_row = 1;
