@@ -11,9 +11,10 @@
 #define UCLIP(x,a) ( (x) < (a) ? (x) : (a)-1 )
 
 /// Python adaptors
-static PyObject *discrete_histogram              (PyObject* self, PyObject* args);
-static PyObject *mask_laplacian               (PyObject *self, PyObject *args); 
-static PyObject *mask_refine             (PyObject *self, PyObject *args); 
+static PyObject *discrete_histogram   (PyObject* self, PyObject* args);
+static PyObject *discrete_log2rootk   (PyObject *self, PyObject *args);
+static PyObject *mask_laplacian       (PyObject *self, PyObject *args); 
+static PyObject *mask_refine          (PyObject *self, PyObject *args); 
 static PyObject *label                (PyObject *self, PyObject *args); 
 
 
@@ -27,6 +28,7 @@ static PyObject *label                (PyObject *self, PyObject *args);
 //
 static PyMethodDef methods[] = {
   { "discrete_histogram", discrete_histogram, METH_VARARGS, "Fast histogram for images."},
+  { "discrete_log2rootk", discrete_log2rootk, METH_VARARGS, "Fast k-th root-of-2 logarithm for discrete signalsi (k integer)."},
   { "mask_laplacian", mask_laplacian, METH_VARARGS, "Compute Laplacian within each ROI ."},
   { "mask_refine", mask_refine, METH_VARARGS, "Assign CR score to each ROI"},
   { "label", label, METH_VARARGS, "Image labeling"},
@@ -41,6 +43,133 @@ PyMODINIT_FUNC initcrimg(void) {
   (void) Py_InitModule("crimg", methods);
   import_array();
 }
+//
+//--------------------------------------------------------
+// discrete_log2rootk
+//--------------------------------------------------------
+//
+static void _discrete_log2rootk_8 (PyArrayObject* py_I, PyArrayObject* py_H, npy_uint k);
+static void _discrete_log2rootk_16(PyArrayObject* py_I, PyArrayObject* py_H, npy_uint k);
+static void _discrete_log2rootk_32(PyArrayObject* py_I, PyArrayObject* py_H, npy_uint k);
+static void _discrete_log2rootk_64(PyArrayObject* py_I, PyArrayObject* py_H, npy_uint k);
+
+static PyObject *discrete_log2rootk(PyObject *self, PyObject *args) {
+  PyArrayObject *py_I, *py_H;
+  npy_uint k;
+  // Parse arguments: image
+  if(!PyArg_ParseTuple(args, "O!I",
+                       &PyArray_Type,
+                       &py_I,
+		       &k
+		       )) {
+    return NULL;
+  }
+  const PyArray_Descr* desc = PyArray_DESCR(py_I);
+  if (desc->kind != 'u') {
+    PyErr_Warn(PyExc_Warning,"Data type must be unsigned integer.");
+    return NULL;
+  }
+  const char typecode = desc->type_num;
+
+  py_H = (PyArrayObject*) PyArray_SimpleNew(PyArray_NDIM(py_I),PyArray_DIMS(py_I),NPY_UINT8);
+  //
+  // H[i,j] = [ log_2^(1/k) (x) ] = [ k log_2 x ]
+  //
+  switch (typecode) {
+  case NPY_UINT8: case NPY_BOOL:
+    PyErr_Warn(PyExc_Warning,"uint8/bool.");
+    _discrete_log2rootk_8(py_I, py_H,k);
+    break;
+  case NPY_UINT16:
+    PyErr_Warn(PyExc_Warning,"16.");
+    _discrete_log2rootk_16(py_I, py_H,k);
+    break;
+  case NPY_UINT32:
+    PyErr_Warn(PyExc_Warning,"32.");
+    _discrete_log2rootk_32(py_I, py_H,k);
+    break;
+  case NPY_UINT64:
+    PyErr_Warn(PyExc_Warning,"64.");
+    _discrete_log2rootk_64(py_I, py_H,k);
+    break;
+  default:
+    PyErr_Warn(PyExc_Warning,"Only unsigned integers allowed.");
+    return NULL;
+  }
+  return PyArray_Return(py_H);
+}
+
+static void _discrete_log2rootk_8(PyArrayObject* py_I, PyArrayObject* py_H, npy_uint k) {
+  npy_uint8*      rH = PyArray_DATA(py_H);
+  const npy_intp  sH = PyArray_STRIDE(py_H,0);
+  npy_uint8*      rI = PyArray_DATA(py_I);
+  const npy_intp  sI = PyArray_STRIDE(py_I,0);
+  const npy_intp  M = PyArray_DIM(py_I,0);
+  const npy_intp  N = PyArray_DIM(py_I,1);
+  
+  for (npy_intp i = 0; i < M; i++, rH += sH, rI += sI) {
+    for (npy_intp j = 0; j < N; j++) {
+      npy_uint8 lx = 0;
+      npy_int64 x = k*rI[j];
+      while (x >>= 1)
+	lx++;
+      rH[j] = (npy_uint8) lx; // overflow must be controlled by user
+    }
+  }
+}
+
+static void _discrete_log2rootk_16(PyArrayObject* py_I, PyArrayObject* py_H, npy_uint k) {
+  npy_uint8*      rH = PyArray_DATA(py_H);
+  const npy_intp  sH = PyArray_STRIDE(py_H,0);
+  npy_uint16*     rI = PyArray_DATA(py_I);
+  const npy_intp  sI = PyArray_STRIDE(py_I,0)/2;
+  const npy_intp  M = PyArray_DIM(py_H,0);
+  const npy_intp  N = PyArray_DIM(py_H,1);
+  
+  for (npy_intp i = 0; i < M; i++, rH += sH, rI += sI) {
+    for (npy_intp j = 0; j < N; j++) {
+      npy_uint8 lx = 0;
+      npy_uint64 x = k*rI[j];
+      while (x >>= 1) lx++;
+      rH[j] = lx;
+    }
+  }
+}
+static void _discrete_log2rootk_32(PyArrayObject* py_I, PyArrayObject* py_H, npy_uint k) {
+  npy_uint8*      rH = PyArray_DATA(py_H);
+  const npy_intp  sH = PyArray_STRIDE(py_H,0);
+  npy_uint32*     rI = PyArray_DATA(py_I);
+  const npy_intp  sI = PyArray_STRIDE(py_I,0)/4;
+  const npy_intp  M  = PyArray_DIM(py_I,0);
+  const npy_intp  N  = PyArray_DIM(py_I,1);
+  
+  for (npy_intp i = 0; i < M; i++, rH += sH, rI += sI) {
+    for (npy_intp j = 0; j < N; j++) {
+      npy_uint8 lx = 0;
+      npy_int64 x = k*rI[j];
+      while (x >>= 1) lx++;
+      rH[j] = lx;
+    }
+  }
+}
+static void _discrete_log2rootk_64(PyArrayObject* py_I, PyArrayObject* py_H, npy_uint k) {
+  npy_uint8*      rH = PyArray_DATA(py_H);
+  const npy_uint8 sH = PyArray_STRIDE(py_H,0);
+  npy_uint64*     rI = PyArray_DATA(py_I);
+  const npy_uint8 sI = PyArray_STRIDE(py_I,0);
+  const npy_intp  M  = PyArray_DIM(py_I,0);
+  const npy_intp  N  = PyArray_DIM(py_I,1);
+  
+  for (npy_intp i = 0; i < M; i++, rH += sH, rI += sI) {
+    for (npy_intp j = 0; j < N; j++) {
+      npy_uint8 lx = 0;
+      npy_int64 x = k*rI[j];
+      while (x >>= 1) lx++;
+      rH[j] = lx;
+    }
+  }
+}
+
 //
 //--------------------------------------------------------
 // discrete_histogram
