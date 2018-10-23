@@ -9,8 +9,10 @@
 ///
 #define CCLIP(x,a,b) ( (x) > (a) ? ( (x) < (b) ? (x) : (b) ) : (a) )
 #define UCLIP(x,a) ( (x) < (a) ? (x) : (a)-1 )
+#define REFLECT(x,a,b) ( (x) > (a) ? ( (x) < (b) ? (x) : ((b)-(x)) ) : ((a)-(x)) )
 
 /// Python adaptors
+static PyObject *binary_closure       (PyObject* self, PyObject* args);
 static PyObject *discrete_histogram   (PyObject* self, PyObject* args);
 static PyObject *discrete_log2rootk   (PyObject *self, PyObject *args);
 static PyObject *mask_laplacian       (PyObject *self, PyObject *args); 
@@ -27,6 +29,7 @@ static PyObject *label                (PyObject *self, PyObject *args);
 //--------------------------------------------------------
 //
 static PyMethodDef methods[] = {
+  { "binary_closure", binary_closure, METH_VARARGS, "Morphological closure for binary images."},
   { "discrete_histogram", discrete_histogram, METH_VARARGS, "Fast histogram for images."},
   { "discrete_log2rootk", discrete_log2rootk, METH_VARARGS, "Fast k-th root-of-2 logarithm for discrete signalsi (k integer)."},
   { "mask_laplacian", mask_laplacian, METH_VARARGS, "Compute Laplacian within each ROI ."},
@@ -42,6 +45,92 @@ static PyMethodDef methods[] = {
 PyMODINIT_FUNC initcrimg(void) {
   (void) Py_InitModule("crimg", methods);
   import_array();
+}
+
+
+//
+//--------------------------------------------------------
+// binary 4 or 8 neighbor closure
+//--------------------------------------------------------
+//
+static PyObject *binary_closure(PyObject *self, PyObject *args) {
+  PyArrayObject *py_M, *py_C;
+  npy_uint k;
+  // Parse arguments: image, neighborhood: 4 or 8
+  if(!PyArg_ParseTuple(args, "O!I", 
+                       &PyArray_Type,
+                       &py_M,
+		       &k
+		       )) {
+    return NULL;
+  }
+  const PyArray_Descr* desc = PyArray_DESCR(py_M);
+  const char typecode = desc->type_num;
+  if ((typecode != NPY_UINT8) && ((typecode != NPY_UINT8))) {
+    PyErr_Warn(PyExc_Warning,"Data type must be numpy.uint8 or numpy.bool.");
+    return NULL;
+  }
+  const npy_intp M = PyArray_DIM(py_M,0);
+  const npy_intp N = PyArray_DIM(py_M,1);
+  
+  // data type ok, proceed
+  // create returned mask
+  py_C = (PyArrayObject*) PyArray_SimpleNew(PyArray_NDIM(py_M),PyArray_DIMS(py_M),typecode);
+  npy_uint8* rM = PyArray_DATA(rM);
+  npy_intp   sM = PyArray_STRIDE(rM);
+  npy_uint8* rC = PyArray_DATA(rC);
+  npy_intp   sC = PyArray_STRIDE(rC);
+  if (k == 4) { // 4-neighborhood
+    //
+    // 1.top row
+    //
+    // 1.1 top-left corner
+    // ·#
+    // #
+    rC[0] = rM[1] && rM[sM]; // east and south ON
+    rC += sM; rM += sM;
+    // 1.2 middle columns
+    for (npy_intp j = 1; j < (N-1); ++j) {
+      // #·#  or  #·  or ·#
+      //  #        #     #
+      rC[j] = rM[sC] && (rM[j-1] || rM[j+1]); 
+    }
+    // 1.3 top-right corner
+    // #·
+    //  #    
+    rC[N-1] = rM[N-2] && rM[sC]; // west and south ON
+    rC += sM; rM += sM;
+    //
+    // 2. middle
+    //
+    for (npy_intp i = 1; j < (M-1); ++i, rC+=sC, rM+=sM) {
+      // left 
+      // ·# or #   or #
+      // #     ·#     ·#
+      //              #
+      rC[0] = rM[1] && (rM[sM] || rM[-sM]); 
+      rC += sM; rM += sM;
+      // 1.2 middle columns
+      //  #        #     #
+      // #·#  or  #·  or ·# or #·#
+      //  #        #     #      #
+      for (npy_intp j = 1; j < (N-1); ++j) {
+	// n + s + e +w >= 3
+	npy_uint8 n = rM[-sC] > 0 ? 0 : 1;
+	npy_uint8 s = rM[+sC] > 0 ? 0 : 1;
+	npy_uint8 e = rM[j+1] > 0 ? 0 : 1;
+	npy_uint8 w = rM[j-1] > 0 ? 0 : 1;
+	rC[j] = ( n + s + e +w ) >= 3; 
+      }
+      // 1.3 right corner
+      //      #   #
+      // #·  #·  #·
+      //  #       #
+      rC[N-1] = rM[N-2] && (rM[N-1+sM] || rM[N-1-sM]); 
+    }
+    // last row
+  } else if (k == 8) { // 8-neighborhood
+  }
 }
 //
 //--------------------------------------------------------
