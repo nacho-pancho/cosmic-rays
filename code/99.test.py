@@ -24,8 +24,18 @@ if len(sys.argv) > 1:
 else:
     lista = "cielo_sep.txt"
 
-plt.figure()
+CMAP = plt.get_cmap('nipy_spectral')
 
+plt.figure(3)
+T = io.imread('../data/closure_test.png').astype(np.uint8)
+plt.subplot(121)
+plt.imshow(T.astype(np.double),cmap=CMAP)
+
+TC = crimg.binary_closure(T)
+plt.subplot(122)
+plt.imshow(TC.astype(np.double))
+
+plt.show()
 with open(DATADIR+lista) as filelist:
     for fname  in filelist:
         print fname,
@@ -51,6 +61,11 @@ with open(DATADIR+lista) as filelist:
         io.imsave(fname[(fname.rfind('/')+1):-1]+'.log.png',limg)
         mask = (limg > (med+12)) # great threshold!
         io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask.png',mask*255)
+        mask = crimg.binary_closure(mask) # closure
+        mask = crimg.binary_closure(mask) # closure
+        io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask-closure.png',mask*255)
+        mask_lap = crimg.mask_laplacian(limg, mask);
+        io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask-laplacian.png',mask_lap)
         plt.figure(2,figsize=(10,10))
         plt.semilogy(hist,'*-')
         plt.figure(3,figsize=(10,10))
@@ -58,7 +73,6 @@ with open(DATADIR+lista) as filelist:
         label = crimg.label(mask)
         print np.max(label)
         label = label.astype(np.double)*(1.0/np.max(label))
-	cmap = plt.get_cmap('hot')
-        io.imsave(fname[(fname.rfind('/')+1):-1]+'.label.png',cmap(label))
+        io.imsave(fname[(fname.rfind('/')+1):-1]+'.label.png',CMAP(label))
         k = k + 1
 plt.show()

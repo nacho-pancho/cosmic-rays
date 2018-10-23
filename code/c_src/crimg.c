@@ -55,18 +55,13 @@ PyMODINIT_FUNC initcrimg(void) {
 //
 static PyObject *binary_closure(PyObject *self, PyObject *args) {
   PyArrayObject *py_M, *py_C;
-  npy_uint k;
   // Parse arguments: image, neighborhood: 4 or 8
-  if(!PyArg_ParseTuple(args, "O!I", 
-                       &PyArray_Type,
-                       &py_M,
-		       &k
-		       )) {
+  if(!PyArg_ParseTuple(args, "O!", &PyArray_Type, &py_M)) {
     return NULL;
   }
   const PyArray_Descr* desc = PyArray_DESCR(py_M);
   const char typecode = desc->type_num;
-  if ((typecode != NPY_UINT8) && ((typecode != NPY_UINT8))) {
+  if ((typecode != NPY_BOOL) && ((typecode != NPY_UINT8))) {
     PyErr_Warn(PyExc_Warning,"Data type must be numpy.uint8 or numpy.bool.");
     return NULL;
   }
@@ -75,62 +70,83 @@ static PyObject *binary_closure(PyObject *self, PyObject *args) {
   
   // data type ok, proceed
   // create returned mask
-  py_C = (PyArrayObject*) PyArray_SimpleNew(PyArray_NDIM(py_M),PyArray_DIMS(py_M),typecode);
-  npy_uint8* rM = PyArray_DATA(rM);
-  npy_intp   sM = PyArray_STRIDE(rM);
-  npy_uint8* rC = PyArray_DATA(rC);
-  npy_intp   sC = PyArray_STRIDE(rC);
-  if (k == 4) { // 4-neighborhood
-    //
-    // 1.top row
-    //
-    // 1.1 top-left corner
-    // ·#
-    // #
-    rC[0] = rM[1] && rM[sM]; // east and south ON
-    rC += sM; rM += sM;
-    // 1.2 middle columns
-    for (npy_intp j = 1; j < (N-1); ++j) {
-      // #·#  or  #·  or ·#
-      //  #        #     #
-      rC[j] = rM[sC] && (rM[j-1] || rM[j+1]); 
-    }
-    // 1.3 top-right corner
-    // #·
-    //  #    
-    rC[N-1] = rM[N-2] && rM[sC]; // west and south ON
-    rC += sM; rM += sM;
-    //
-    // 2. middle
-    //
-    for (npy_intp i = 1; j < (M-1); ++i, rC+=sC, rM+=sM) {
-      // left 
-      // ·# or #   or #
-      // #     ·#     ·#
-      //              #
-      rC[0] = rM[1] && (rM[sM] || rM[-sM]); 
-      rC += sM; rM += sM;
-      // 1.2 middle columns
-      //  #        #     #
-      // #·#  or  #·  or ·# or #·#
-      //  #        #     #      #
-      for (npy_intp j = 1; j < (N-1); ++j) {
-	// n + s + e +w >= 3
-	npy_uint8 n = rM[-sC] > 0 ? 0 : 1;
-	npy_uint8 s = rM[+sC] > 0 ? 0 : 1;
-	npy_uint8 e = rM[j+1] > 0 ? 0 : 1;
-	npy_uint8 w = rM[j-1] > 0 ? 0 : 1;
-	rC[j] = ( n + s + e +w ) >= 3; 
-      }
-      // 1.3 right corner
-      //      #   #
-      // #·  #·  #·
-      //  #       #
-      rC[N-1] = rM[N-2] && (rM[N-1+sM] || rM[N-1-sM]); 
-    }
-    // last row
-  } else if (k == 8) { // 8-neighborhood
+  py_C = (PyArrayObject*) PyArray_SimpleNew(2,PyArray_DIMS(py_M),typecode);
+  npy_uint8* rM = PyArray_DATA(py_M);
+  npy_intp   sM = PyArray_STRIDE(py_M,0);
+  npy_uint8* rC = PyArray_DATA(py_C);
+  npy_intp   sC = PyArray_STRIDE(py_C,0);
+  //
+  // 1.top row
+  //
+  // 1.1 top-left corner
+  // ·#
+  // #
+  rC[0] = rM[0] || (rM[1] && rM[sM]); // east and south ON
+  // 1.2 middle columns
+  for (npy_intp j = 1; j < (N-1); ++j) {
+    // #·#  or  #·  or ·#
+    //  #        #     #
+    rC[j] = rM[j] || (rM[sM+j] && (rM[j-1] || rM[j+1])); 
   }
+  // 1.3 top-right corner
+  // #·
+  //  #
+  rC[N-1] = rM[N-1] || (rM[N-2] && rM[sM+N-1]); // west and south ON
+  //
+  // advance row
+  //
+  rC += sM; rM += sM;
+  //
+  // 2. middle
+  //
+  for (npy_intp i = 1; i < (M-1); ++i, rC+=sC, rM+=sM) {
+    // 2.1 left  coluumn
+    // ·# or #   or #
+    // #     ·#     ·#
+    //              #
+    rC[0] = rM[0] || (rM[1] && (rM[sM] || rM[-sM])); 
+    // 2.2 middle columns
+    //  #        #     #
+    // #·#  or  #·  or ·# or #·#
+    //  #        #     #      #
+    for (npy_intp j = 1; j < (N-1); ++j) {
+      // n + s + e +w >= 3
+      if (rM[j]) {
+	rC[j] = 1;
+      } else {
+	npy_uint8 n = rM[j-sC] > 0 ? 1 : 0;
+	npy_uint8 s = rM[j+sC] > 0 ? 1 : 0;
+	npy_uint8 e = rM[j+1] > 0 ? 1 : 0;
+	npy_uint8 w = rM[j-1] > 0 ? 1 : 0;
+	rC[j] = (( n + s + e +w ) >= 3);
+      }
+    }
+    // 2.3 right column
+    //      #   #
+    // #·  #·  #·
+    //  #       #
+    rC[N-1] = rM[N-1] || ( rM[N-2] && (rM[N-1+sM] || rM[N-1-sM]) ); 
+  }
+  // last row
+  //
+  // 1.1 bottom-left corner
+  // #
+  // ·#
+  rC[0] = rM[0] || (rM[1] && rM[-sM]); // east and south ON
+  // 1.2 middle columns
+  for (npy_intp j = 1; j < (N-1); ++j) {
+    //  #        #     #
+    // #·#  or  #·  or ·#
+    rC[j] = rM[j] || ( rM[j-sC] && (rM[j-1] || rM[j+1]) ); 
+  }
+  // 1.3 bottom-right corner
+  //  #    
+  // #·
+  rC[N-1] = rM[N-1] || (rM[N-2] && rM[N-1-sC]); // west and south ON
+  //
+  // finish!
+  //
+  return PyArray_Return(py_C);
 }
 //
 //--------------------------------------------------------
@@ -330,7 +346,10 @@ static PyObject *discrete_histogram(PyObject *self, PyObject *args) {
 // the absolute value of the Laplacian
 //
 //
-static void _mask_laplacian_(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
+static void _mask_laplacian_8(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
+static void _mask_laplacian_16(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
+static void _mask_laplacian_32(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
+static void _mask_laplacian_64(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
 
 static PyObject *mask_laplacian(PyObject *self, PyObject *args) {
   PyArrayObject *py_I, *py_M, *py_L;
@@ -339,13 +358,94 @@ static PyObject *mask_laplacian(PyObject *self, PyObject *args) {
 		       &PyArray_Type, &py_M)) {
     return NULL;
   }
-  py_L = (PyArrayObject*) PyArray_SimpleNew(2,PyArray_DIMS(py_I),NPY_UINT16);
-  _mask_laplacian_(py_I,py_M,py_L);
+
+  //
+  // type checking
+  //
+  // mask:
+  PyArray_Descr* desc = PyArray_DESCR(py_M);
+  desc = PyArray_DESCR(py_M);
+  char typecode = desc->type_num;
+  if ((typecode != NPY_BOOL) && ((typecode != NPY_UINT8))) {
+    PyErr_Warn(PyExc_Warning,"Mask must be numpy.uint8 or numpy.bool.");
+    return NULL;
+  }
+  // image:
+  desc = PyArray_DESCR(py_I);
+  typecode = desc->type_num;
+
+  py_L = (PyArrayObject*) PyArray_SimpleNew(PyArray_NDIM(py_I),PyArray_DIMS(py_I),NPY_UINT16);
+
+  switch (typecode) {
+  case NPY_UINT8: case NPY_BOOL:
+    _mask_laplacian_8(py_I, py_M, py_L);
+    break;
+  case NPY_UINT16:
+    _mask_laplacian_16(py_I, py_M, py_L);
+    break;
+  case NPY_UINT32:
+    _mask_laplacian_32(py_I, py_M, py_L);
+    break;
+  case NPY_UINT64:
+    _mask_laplacian_64(py_I, py_M, py_L);
+    break;
+  default:
+    PyErr_Warn(PyExc_Warning, "Only unsigned integers allowed.");
+    return NULL;
+  }
   return PyArray_Return(py_L);  
 }
 
-static void _mask_laplacian_(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L) {
+static void _mask_laplacian_8(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L) {
+  const npy_intp M = PyArray_DIM(py_I,0);
+  const npy_intp N = PyArray_DIM(py_I,1);
+  npy_uint8*     rM = PyArray_DATA(py_M);
+  npy_intp       sM = PyArray_STRIDE(py_M,0);
+  npy_uint8*     rI = PyArray_DATA(py_I);
+  npy_intp       sI = PyArray_STRIDE(py_I,0);
+  npy_uint16*    rL = PyArray_DATA(py_L);
+  npy_intp       sL = PyArray_STRIDE(py_L,0)/2;
+  for (npy_intp i = 0; i < M; i++) {
+    npy_uint8* rIs, *rIn;
+    if (i > 0) {
+      rIn = rI-sI;
+    } else {
+      rIn = rI+sI; // reflected
+    }
+    if (i < (M-1)) {
+      rIs = rI + sI; 
+    } else {
+      rIs = rI - sI; // reflected
+    }
+    for (npy_intp j = 0; j < N; j++) {
+      if (!rM[j]) {
+	rL[j] = 0;
+      } else {
+	const npy_intp jw = (j > 0) ? j-1 : 1;
+	const npy_intp je = (j < (N-1)) ? j+1 : N-2;
+	const npy_int64 n = rIn[j];
+	const npy_int64 s = rIs[j];
+	const npy_int64 w = rI[jw];
+	const npy_int64 e = rI[je];
+	const npy_int64 x = rI[j];	
+	npy_int64 Lij = (x<<4) - s - n - e - w;
+	if (Lij < 0) Lij = -Lij;
+	rL[j] = (npy_uint16) Lij;
+      }
+    }
+    rM += sM; rI += sI; rL += sL;    
+  }
 }
+
+static void _mask_laplacian_16(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L) {
+}
+
+static void _mask_laplacian_32(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L) {
+}
+
+static void _mask_laplacian_64(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L) {
+}
+
 
 //
 //--------------------------------------------------------
@@ -447,7 +547,7 @@ void _replace_label_(PyArrayObject* pL, npy_intp a, npy_intp b, npy_intp lasti, 
   const npy_intp label_vstride = PyArray_STRIDE(pL,0)/4;
   npy_uint32 *label_data = PyArray_DATA(pL);
   npy_uint32 *label_row = label_data+ label_vstride*lasti;
-  printf("replace %lu by %lu starting at %lu %lu\n",a,b,lasti,lastj);
+  //  printf("replace %lu by %lu starting at %lu %lu\n",a,b,lasti,lastj);
   npy_intp i,j;
   for (i = lasti; i; i--, label_row -= label_vstride ) {
     char any_replacement_in_this_row = 0;
