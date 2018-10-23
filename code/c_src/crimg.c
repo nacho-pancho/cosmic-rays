@@ -428,7 +428,7 @@ static void _mask_laplacian_8(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayO
 	const npy_int64 w = rI[jw];
 	const npy_int64 e = rI[je];
 	const npy_int64 x = rI[j];	
-	npy_int64 Lij = (x<<4) - s - n - e - w;
+	npy_int64 Lij = (x<<2) - s - n - e - w;
 	if (Lij < 0) Lij = -Lij;
 	rL[j] = (npy_uint16) Lij;
       }

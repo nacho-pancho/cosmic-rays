@@ -26,16 +26,16 @@ else:
 
 CMAP = plt.get_cmap('nipy_spectral')
 
-plt.figure(3)
-T = io.imread('../data/closure_test.png').astype(np.uint8)
-plt.subplot(121)
-plt.imshow(T.astype(np.double),cmap=CMAP)
+#plt.figure(3)
+#T = io.imread('../data/closure_test.png').astype(np.uint8)
+#plt.subplot(121)
+#plt.imshow(T.astype(np.double),cmap=CMAP)
 
-TC = crimg.binary_closure(T)
-plt.subplot(122)
-plt.imshow(TC.astype(np.double))
+#TC = crimg.binary_closure(T)
+#plt.subplot(122)
+#plt.imshow(TC.astype(np.double))
 
-plt.show()
+#plt.show()
 with open(DATADIR+lista) as filelist:
     for fname  in filelist:
         print fname,
@@ -57,15 +57,15 @@ with open(DATADIR+lista) as filelist:
         chist = np.cumsum(hist)
         med = np.flatnonzero(chist > N/2)[0]
         print 'median=',med
-        plt.figure(1,figsize=(10,10))
-        io.imsave(fname[(fname.rfind('/')+1):-1]+'.log.png',limg)
+        io.imsave(fname[(fname.rfind('/')+1):-1]+'.log.png',CMAP(limg))
         mask = (limg > (med+12)) # great threshold!
         io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask.png',mask*255)
         mask = crimg.binary_closure(mask) # closure
         mask = crimg.binary_closure(mask) # closure
         io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask-closure.png',mask*255)
         mask_lap = crimg.mask_laplacian(limg, mask);
-        io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask-laplacian.png',mask_lap)
+        mask_lap = mask_lap.astype(np.double)*(1.0/np.max(mask_lap))
+        io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask-laplacian.png',CMAP(mask_lap))
         plt.figure(2,figsize=(10,10))
         plt.semilogy(hist,'*-')
         plt.figure(3,figsize=(10,10))
