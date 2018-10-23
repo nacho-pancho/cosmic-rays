@@ -77,23 +77,19 @@ static PyObject *discrete_log2rootk(PyObject *self, PyObject *args) {
   //
   switch (typecode) {
   case NPY_UINT8: case NPY_BOOL:
-    PyErr_Warn(PyExc_Warning,"uint8/bool.");
-    _discrete_log2rootk_8(py_I, py_H,k);
+    _discrete_log2rootk_8(py_I, py_H, k);
     break;
   case NPY_UINT16:
-    PyErr_Warn(PyExc_Warning,"16.");
-    _discrete_log2rootk_16(py_I, py_H,k);
+    _discrete_log2rootk_16(py_I, py_H, k);
     break;
   case NPY_UINT32:
-    PyErr_Warn(PyExc_Warning,"32.");
-    _discrete_log2rootk_32(py_I, py_H,k);
+    _discrete_log2rootk_32(py_I, py_H, k);
     break;
   case NPY_UINT64:
-    PyErr_Warn(PyExc_Warning,"64.");
-    _discrete_log2rootk_64(py_I, py_H,k);
+    _discrete_log2rootk_64(py_I, py_H, k);
     break;
   default:
-    PyErr_Warn(PyExc_Warning,"Only unsigned integers allowed.");
+    PyErr_Warn(PyExc_Warning, "Only unsigned integers allowed.");
     return NULL;
   }
   return PyArray_Return(py_H);
@@ -110,7 +106,9 @@ static void _discrete_log2rootk_8(PyArrayObject* py_I, PyArrayObject* py_H, npy_
   for (npy_intp i = 0; i < M; i++, rH += sH, rI += sI) {
     for (npy_intp j = 0; j < N; j++) {
       npy_uint8 lx = 0;
-      npy_int64 x = k*rI[j];
+      npy_int64 x = rI[j];
+      npy_uint kk = k;
+      while( kk--) { x *= x; }
       while (x >>= 1)
 	lx++;
       rH[j] = (npy_uint8) lx; // overflow must be controlled by user
@@ -123,13 +121,15 @@ static void _discrete_log2rootk_16(PyArrayObject* py_I, PyArrayObject* py_H, npy
   const npy_intp  sH = PyArray_STRIDE(py_H,0);
   npy_uint16*     rI = PyArray_DATA(py_I);
   const npy_intp  sI = PyArray_STRIDE(py_I,0)/2;
-  const npy_intp  M = PyArray_DIM(py_H,0);
-  const npy_intp  N = PyArray_DIM(py_H,1);
-  
+  const npy_intp  M  = PyArray_DIM(py_H,0);
+  const npy_intp  N  = PyArray_DIM(py_H,1);
+  printf("k=%lu\n",k);
   for (npy_intp i = 0; i < M; i++, rH += sH, rI += sI) {
     for (npy_intp j = 0; j < N; j++) {
       npy_uint8 lx = 0;
-      npy_uint64 x = k*rI[j];
+      npy_uint64 x = rI[j];
+      npy_uint kk = k;
+      while( kk--) { x *= x; }
       while (x >>= 1) lx++;
       rH[j] = lx;
     }
@@ -146,7 +146,9 @@ static void _discrete_log2rootk_32(PyArrayObject* py_I, PyArrayObject* py_H, npy
   for (npy_intp i = 0; i < M; i++, rH += sH, rI += sI) {
     for (npy_intp j = 0; j < N; j++) {
       npy_uint8 lx = 0;
-      npy_int64 x = k*rI[j];
+      npy_uint64 x = rI[j];
+      npy_uint kk = k;
+      while( kk--) { x *= x; }
       while (x >>= 1) lx++;
       rH[j] = lx;
     }
@@ -163,7 +165,9 @@ static void _discrete_log2rootk_64(PyArrayObject* py_I, PyArrayObject* py_H, npy
   for (npy_intp i = 0; i < M; i++, rH += sH, rI += sI) {
     for (npy_intp j = 0; j < N; j++) {
       npy_uint8 lx = 0;
-      npy_int64 x = k*rI[j];
+      npy_uint64 x = rI[j];
+      npy_uint kk = k;
+      while( kk--) { x *= x; }
       while (x >>= 1) lx++;
       rH[j] = lx;
     }
@@ -297,7 +301,7 @@ static PyObject *label(PyObject *self, PyObject *args) {
                        &PyArray_Type, &py_M)) {
     return NULL;
  }
-  py_L = (PyArrayObject*) PyArray_SimpleNew(2,PyArray_DIMS(py_M),NPY_UINT64); 
+  py_L = (PyArrayObject*) PyArray_SimpleNew(2,PyArray_DIMS(py_M),NPY_UINT32); 
   PyArray_FILLWBYTE(py_L,0);
   _label_(py_M,py_L);
   return PyArray_Return(py_L);  
@@ -309,14 +313,14 @@ void _label_(PyArrayObject* pM, PyArrayObject* pL) {
   const npy_intp hsize = PyArray_DIM(pM,1);
   const npy_intp vsize = PyArray_DIM(pM,0);
   const npy_intp mask_vstride = PyArray_STRIDE(pM,0);
-  const npy_intp label_vstride = PyArray_STRIDE(pL,0);
+  const npy_intp label_vstride = PyArray_STRIDE(pL,0)/4;
   
   const npy_uint8 *mask_row = PyArray_DATA(pM);
   npy_uint32 *label_data = PyArray_DATA(pL);
   npy_uint32 *label_row = label_data;
   npy_uint32 *label_prev_row = label_row - label_vstride;
   
-  int L = 1; // current label number
+  npy_uint32 L = 1; // current label number
   register int i,j;
   for (i = 0; i < vsize; ++i, label_row += label_vstride, label_prev_row += label_vstride, mask_row += mask_vstride) {
     for (j = 0; j < hsize; ++j) {
@@ -324,8 +328,8 @@ void _label_(PyArrayObject* pM, PyArrayObject* pL) {
 	continue;
       }
       
-      int Ln = (i > 0) ? label_prev_row[j] : 0; // mask value to the north
-      int Lw = (j > 0) ? label_row[j-1] : 0; // mask value to the west
+      npy_uint32 Ln = (i > 0) ? label_prev_row[j] : 0; // mask value to the north
+      npy_uint32 Lw = (j > 0) ? label_row[j-1] : 0; // mask value to the west
       if (Ln == 0) {
 	if (Lw == 0) { // no ROI to either north or west
 	  label_row[j] = L++; // create new (tentative) label at this point
@@ -350,7 +354,7 @@ void _label_(PyArrayObject* pM, PyArrayObject* pL) {
 
 void _replace_label_(PyArrayObject* pL, npy_intp a, npy_intp b, npy_intp lasti, npy_intp lastj) {
   const npy_intp hsize = PyArray_DIM(pL,1);
-  const npy_intp label_vstride = PyArray_STRIDE(pL,0);
+  const npy_intp label_vstride = PyArray_STRIDE(pL,0)/4;
   npy_uint32 *label_data = PyArray_DATA(pL);
   npy_uint32 *label_row = label_data;
 
