@@ -343,7 +343,7 @@ void _label_(PyArrayObject* pM, PyArrayObject* pL) {
 	}  else { 
 	  label_row[j] = Lw; 
 	  if (Ln != Lw) { // different labels to N and W! Resolve 
-	    _replace_label_(pL,Ln,Lw,i,j); 
+	    _replace_label_(pL,Lw,Ln,i,j); 
 	  }
 	}
       } 
@@ -358,7 +358,7 @@ void _replace_label_(PyArrayObject* pL, npy_intp a, npy_intp b, npy_intp lasti, 
   const npy_intp label_vstride = PyArray_STRIDE(pL,0)/4;
   npy_uint32 *label_data = PyArray_DATA(pL);
   npy_uint32 *label_row = label_data+ label_vstride*lasti;
-
+  printf("replace %lu by %lu starting at %lu %lu\n",a,b,lasti,lastj);
   npy_intp i,j;
   for (i = lasti; i; i--, label_row -= label_vstride ) {
     char any_replacement_in_this_row = 0;
@@ -379,6 +379,6 @@ void _replace_label_(PyArrayObject* pL, npy_intp a, npy_intp b, npy_intp lasti, 
 // if region merging occurs, the final labels are not consecutive
 // here we re-label the image so that labels are consecutive
 //
-//void _compact_label_(PyArrayObject* pL) {
-//}
+void _compact_label_(PyArrayObject* pL) {
+}
 
