@@ -123,7 +123,6 @@ static void _discrete_log2rootk_16(PyArrayObject* py_I, PyArrayObject* py_H, npy
   const npy_intp  sI = PyArray_STRIDE(py_I,0)/2;
   const npy_intp  M  = PyArray_DIM(py_H,0);
   const npy_intp  N  = PyArray_DIM(py_H,1);
-  printf("k=%lu\n",k);
   for (npy_intp i = 0; i < M; i++, rH += sH, rI += sI) {
     for (npy_intp j = 0; j < N; j++) {
       npy_uint8 lx = 0;
