@@ -569,94 +569,101 @@ void _replace_label_(PyArrayObject* pL, npy_intp a, npy_intp b, npy_intp lasti, 
 //--------------------------------------------------------
 // roi_stats
 //
-static void _roi_stats_8(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
-static void _roi_stats_16(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
-static void _roi_stats_32(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
-static void _roi_stats_64(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
+static void _roi_stats_8 (PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayObject* py_S);
+static void _roi_stats_16(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayObject* py_S);
+static void _roi_stats_32(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayObject* py_S);
+static void _roi_stats_64(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayObject* py_S);
 
 static PyObject *roi_stats(PyObject *self, PyObject *args) {
-  PyArrayObject *py_I, *py_M, *py_L;
-  if(!PyArg_ParseTuple(args, "O!O!",
-		       &PyArray_Type, &py_I,
-		       &PyArray_Type, &py_M)) {
+  PyArrayObject *py_Lap, *py_Lab, *py_S;
+  if(!PyArg_ParseTuple(args, "O!O!", &PyArray_Type, &py_Lab,  &PyArray_Type, &py_Lap)) {
     return NULL;
   }
-
   //
   // type checking
   //
-  // mask:
-  PyArray_Descr* desc = PyArray_DESCR(py_M);
-  desc = PyArray_DESCR(py_M);
+  // label image:
+  PyArray_Descr* desc = PyArray_DESCR(py_Lab);
+  desc = PyArray_DESCR(py_Lab);
   char typecode = desc->type_num;
-  if ((typecode != NPY_BOOL) && ((typecode != NPY_UINT8))) {
-    PyErr_Warn(PyExc_Warning,"Mask must be numpy.uint8 or numpy.bool.");
+  if (typecode != NPY_UINT16) {
+    PyErr_Warn(PyExc_Warning,"Label must be numpy.uint16.");
     return NULL;
   }
-  // image:
-  desc = PyArray_DESCR(py_I);
+  // Laplacian image:
+  desc = PyArray_DESCR(py_Lap);
   typecode = desc->type_num;
-
-  py_L = (PyArrayObject*) PyArray_SimpleNew(PyArray_NDIM(py_I),PyArray_DIMS(py_I),NPY_UINT16);
+  //
+  // returned array has size NL+1 x 6
+  // where the columns are:
+  // 0) mean
+  // 1) p00 = min
+  // 2) p10
+  // 3) p25
+  // 4) p50 = med
+  // 5) p75
+  // 6) p90
+  // 7) p100 = max
+  //
+  // row 0 corresponds to global statistics:
+  // 0) global mean
+  // 1) global  min
+  // 2) median of the p10 of all ROIs
+  // 3) median of the p25s
+  // 4-7) etc.
+  // rows 1 to N+1 correspond to the N ROI's
+  //
+  //
+  // first we have to find N
+  //
+  npy_intp N = 0;
+  PyArrayIterObject *iter = (PyArrayIterObject *)PyArray_IterNew((PyObject*)py_Lab);
+  while (PyArray_ITER_NOTDONE(iter)) {
+    const npy_intp l = *((npy_uint16*)PyArray_ITER_DATA(iter));
+    if (l > N)
+      N = l;
+    PyArray_ITER_NEXT(iter);
+  }
+  
+  npy_intp dims[2];
+  dims[0] = N+1;
+  dims[1] = 8;
+  py_S = (PyArrayObject*) PyArray_SimpleNew(2,dims,NPY_UINT16);
 
   switch (typecode) {
   case NPY_UINT8: case NPY_BOOL:
-    _roi_stats_8(py_I, py_M, py_L);
+    _roi_stats_8(py_Lab, py_Lap, py_S);
     break;
   case NPY_UINT16:
-    _roi_stats_16(py_I, py_M, py_L);
+    _roi_stats_16(py_Lab, py_Lap, py_S);
     break;
   case NPY_UINT32:
-    _roi_stats_32(py_I, py_M, py_L);
+    _roi_stats_32(py_Lab, py_Lap, py_S);
     break;
   case NPY_UINT64:
-    _roi_stats_64(py_I, py_M, py_L);
+    _roi_stats_64(py_Lab, py_Lap, py_S);
     break;
   default:
     PyErr_Warn(PyExc_Warning, "Only unsigned integers allowed.");
     return NULL;
   }
-  return PyArray_Return(py_L);  
+  
+  return PyArray_Return(py_S);  
 }
 
-static void _roi_stats_8(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L) {
-  const npy_intp M = PyArray_DIM(py_I,0);
-  const npy_intp N = PyArray_DIM(py_I,1);
-  npy_uint8*     rM = PyArray_DATA(py_M);
-  npy_intp       sM = PyArray_STRIDE(py_M,0);
-  npy_uint8*     rI = PyArray_DATA(py_I);
-  npy_intp       sI = PyArray_STRIDE(py_I,0);
-  npy_uint16*    rL = PyArray_DATA(py_L);
-  npy_intp       sL = PyArray_STRIDE(py_L,0)/2;
+static void _roi_stats_8(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayObject* py_S) {
+  const npy_intp M = PyArray_DIM(py_Lab,0);
+  const npy_intp N = PyArray_DIM(py_Lab,1);
+  npy_uint8 *    rLap = PyArray_DATA(py_Lap);
+  npy_intp       sLap = PyArray_STRIDE(py_Lap,0);
+  npy_uint32*    rLab = PyArray_DATA(py_Lab);
+  npy_intp       sLab = PyArray_STRIDE(py_Lab,0);
+  npy_uint16*    rS = PyArray_DATA(py_S);
+  npy_intp       sS = PyArray_STRIDE(py_S,0)/2;
   for (npy_intp i = 0; i < M; i++) {
-    npy_uint8* rIs, *rIn;
-    if (i > 0) {
-      rIn = rI-sI;
-    } else {
-      rIn = rI+sI; // reflected
-    }
-    if (i < (M-1)) {
-      rIs = rI + sI; 
-    } else {
-      rIs = rI - sI; // reflected
-    }
     for (npy_intp j = 0; j < N; j++) {
-      if (!rM[j]) {
-	rL[j] = 0;
-      } else {
-	const npy_intp jw = (j > 0) ? j-1 : 1;
-	const npy_intp je = (j < (N-1)) ? j+1 : N-2;
-	const npy_int64 n = rIn[j];
-	const npy_int64 s = rIs[j];
-	const npy_int64 w = rI[jw];
-	const npy_int64 e = rI[je];
-	const npy_int64 x = rI[j];	
-	npy_int64 Lij = (x<<2) - s - n - e - w;
-	if (Lij < 0) Lij = -Lij;
-	rL[j] = (npy_uint16) Lij;
-      }
     }
-    rM += sM; rI += sI; rL += sL;    
+    rLap += sLap; rLab += sLab;
   }
 }
 
