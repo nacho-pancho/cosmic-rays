@@ -695,6 +695,7 @@ static void _roi_stats_8(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayOb
 	continue;
       }
       roi_samples[ roi ][ roi_counter[roi]++ ] = rLap[j];
+      roi_samples[ 0 ][ roi_counter[0]++ ] = rLap[j];
     }
     rLap += sLap; rLab += sLab;
   }
