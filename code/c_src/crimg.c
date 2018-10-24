@@ -3,6 +3,7 @@
 #include <numpy/arrayobject.h>
 #include <math.h>
 #include <omp.h>
+#include <stdlib.h>
 
 ///
 /// Contains all the relevant parameters  about the patch decomposition procedure.
@@ -594,9 +595,9 @@ static PyObject *roi_stats(PyObject *self, PyObject *args) {
   desc = PyArray_DESCR(py_Lap);
   typecode = desc->type_num;
   //
-  // returned array has size NL+1 x 6
+  // returned array has size NL+1 x 10
   // where the columns are:
-  // 0) mean
+  // 0) size
   // 1) p00 = min
   // 2) p10
   // 3) p25
@@ -604,32 +605,45 @@ static PyObject *roi_stats(PyObject *self, PyObject *args) {
   // 5) p75
   // 6) p90
   // 7) p100 = max
-  //
+  // 8) mean
+  // 9) var
+  // 
   // row 0 corresponds to global statistics:
-  // 0) global mean
+  // 0) total size
   // 1) global  min
   // 2) median of the p10 of all ROIs
   // 3) median of the p25s
-  // 4-7) etc.
-  // rows 1 to N+1 correspond to the N ROI's
+  // 4-9) same with the rest
+  //
+  // rows 1 to N correspond to the N ROI's
   //
   //
-  // first we have to find N
+  // first pass over label image: find N
   //
   npy_intp N = 0;
   PyArrayIterObject *iter = (PyArrayIterObject *)PyArray_IterNew((PyObject*)py_Lab);
   while (PyArray_ITER_NOTDONE(iter)) {
-    const npy_intp l = *((npy_uint16*)PyArray_ITER_DATA(iter));
+    const npy_intp l = *((npy_uint32*)PyArray_ITER_DATA(iter));
     if (l > N)
       N = l;
     PyArray_ITER_NEXT(iter);
   }
   
   npy_intp dims[2];
-  dims[0] = N+1;
-  dims[1] = 8;
-  py_S = (PyArrayObject*) PyArray_SimpleNew(2,dims,NPY_UINT16);
-
+  dims[0] = N;
+  dims[1] = 10;
+  py_S = (PyArrayObject*) PyArray_SimpleNew(2,dims,NPY_UINT32);
+  PyArray_FILLWBYTE(py_S,0);
+  //
+  // second pass over label: compute the size of each ROI  in first col of py_S
+  //
+  iter = (PyArrayIterObject *)PyArray_IterNew((PyObject*)py_Lab);
+  while (PyArray_ITER_NOTDONE(iter)) {
+    const npy_intp l = *((npy_uint16*)PyArray_ITER_DATA(iter));
+    (*((npy_uint32*)PyArray_GETPTR2(py_S,l,0)))++;
+    (*((npy_uint32*)PyArray_GETPTR2(py_S,0,0)))++;
+    PyArray_ITER_NEXT(iter);
+  }
   switch (typecode) {
   case NPY_UINT8: case NPY_BOOL:
     _roi_stats_8(py_Lab, py_Lap, py_S);
@@ -647,24 +661,80 @@ static PyObject *roi_stats(PyObject *self, PyObject *args) {
     PyErr_Warn(PyExc_Warning, "Only unsigned integers allowed.");
     return NULL;
   }
-  
   return PyArray_Return(py_S);  
 }
+
+int npy_uint32_comp(const void*a , const void* b) { return (long) *((npy_uint32*)a) - (long) *((npy_uint32*)b); }
 
 static void _roi_stats_8(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayObject* py_S) {
   const npy_intp M = PyArray_DIM(py_Lab,0);
   const npy_intp N = PyArray_DIM(py_Lab,1);
+  const npy_intp L = PyArray_DIM(py_S,0);
   npy_uint8 *    rLap = PyArray_DATA(py_Lap); // only change for different input types
   npy_intp       sLap = PyArray_STRIDE(py_Lap,0);
   npy_uint32*    rLab = PyArray_DATA(py_Lab);
-  npy_intp       sLab = PyArray_STRIDE(py_Lab,0);
-  npy_uint16*    rS = PyArray_DATA(py_S);
-  npy_intp       sS = PyArray_STRIDE(py_S,0)/2;
+  npy_intp       sLab = PyArray_STRIDE(py_Lab,0)/4;
+  npy_uint32*    rS = PyArray_DATA(py_S);
+  npy_intp       sS = PyArray_STRIDE(py_S,0)/4;
+  //
+  // auxiliary struct: list of samples of each roi
+  //
+  npy_uint32** roi_samples = (npy_uint32**) malloc(L*sizeof(npy_uint32*));
+  npy_uint32* roi_counter = (npy_uint32*) calloc(L,sizeof(npy_uint32));
+  for (npy_intp l = 0; l < L; l++) {
+    npy_uint32 roi_size = *((npy_uint32*)PyArray_GETPTR2(py_S,l,0));
+    roi_samples[l] = (npy_uint32*) malloc(roi_size*sizeof(npy_uint32));
+  }
+  //
+  // main loop: collect samples for each roi
+  //
   for (npy_intp i = 0; i < M; i++) {
     for (npy_intp j = 0; j < N; j++) {
+      const npy_uint32 roi = rLab[j];
+      if (!roi) {
+	continue;
+      }
+      roi_samples[ roi ][ roi_counter[roi]++ ] = rLap[j];
     }
     rLap += sLap; rLab += sLab;
   }
+  //
+  // sort samples for each roi; fill in corresponding data in py_S
+  //
+  for (npy_intp l = 0; l < L; l++, rS += sS) {
+    size_t roi_size = rS[0];
+    npy_uint32* samples = roi_samples[l];
+    if (roi_size > 1) {
+      qsort(samples, roi_size, sizeof(npy_uint32), npy_uint32_comp);
+    }
+    rS[1] = samples[0]; //min
+    rS[2] = samples[roi_size/10]; // p10
+    rS[3] = samples[roi_size/4]; // p25
+    rS[5] = samples[roi_size/2]; // p50
+    rS[6] = samples[3*roi_size/4]; // p75
+    rS[7] = samples[9*roi_size/10]; // p90
+    npy_uint32 mean = 0;
+    for (npy_intp i = 0; i < roi_size; i++)
+      mean += samples[i];
+    mean /= roi_size;
+    double std = 0;
+    double tmp = 0;
+    for (npy_intp i = 0; i < roi_size; i++) {
+      tmp = samples[i] - mean;
+      std += tmp*tmp;
+    }
+    std /= roi_size;
+    rS[8] = mean; 
+    rS[9] = (npy_uint32) sqrt(std); 
+  }
+  //
+  // cleanup
+  //
+  for (npy_intp l = 0; l < L; l++) {
+    free(roi_samples[l]);
+  }
+  free(roi_samples);
+  free(roi_counter);
 }
 
 static void _roi_stats_16(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L) {
