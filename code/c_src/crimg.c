@@ -654,7 +654,7 @@ static PyObject *roi_stats(PyObject *self, PyObject *args) {
 static void _roi_stats_8(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayObject* py_S) {
   const npy_intp M = PyArray_DIM(py_Lab,0);
   const npy_intp N = PyArray_DIM(py_Lab,1);
-  npy_uint8 *    rLap = PyArray_DATA(py_Lap);
+  npy_uint8 *    rLap = PyArray_DATA(py_Lap); // only change for different input types
   npy_intp       sLap = PyArray_STRIDE(py_Lap,0);
   npy_uint32*    rLab = PyArray_DATA(py_Lab);
   npy_intp       sLab = PyArray_STRIDE(py_Lab,0);
