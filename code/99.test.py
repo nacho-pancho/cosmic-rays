@@ -57,22 +57,24 @@ with open(DATADIR+lista) as filelist:
         chist = np.cumsum(hist)
         med = np.flatnonzero(chist > N/2)[0]
         print 'median=',med
-        io.imsave(fname[(fname.rfind('/')+1):-1]+'.log.png',CMAP(limg))
+        #io.imsave(fname[(fname.rfind('/')+1):-1]+'.log.png',CMAP(limg))
         mask = (limg > (med+12)) # great threshold!
-        io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask.png',mask*255)
+        #io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask.png',mask*255)
         mask = crimg.binary_closure(mask) # closure
         mask = crimg.binary_closure(mask) # closure
-        io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask-closure.png',mask*255)
+        #io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask-closure.png',mask*255)
         mask_lap = crimg.mask_laplacian(limg, mask);
-        mask_lap = mask_lap.astype(np.double)*(1.0/np.max(mask_lap))
-        io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask-laplacian.png',CMAP(mask_lap))
-        plt.figure(2,figsize=(10,10))
-        plt.semilogy(hist,'*-')
-        plt.figure(3,figsize=(10,10))
-        plt.semilogy(chist,'*-')
-        label = crimg.label(mask)
+        #mask_lap_img = mask_lap.astype(np.double)*(1.0/np.max(mask_lap))
+        #io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask-laplacian.png',CMAP(mask_lap_img))
+        #plt.figure(2,figsize=(10,10))
+        #plt.semilogy(hist,'*-')
+        #plt.figure(3,figsize=(10,10))
+        #plt.semilogy(chist,'*-')
+        label = crimg.roi_label(mask)
         print np.max(label)
-        label = label.astype(np.double)*(1.0/np.max(label))
-        io.imsave(fname[(fname.rfind('/')+1):-1]+'.label.png',CMAP(label))
+        #labelimg = label.astype(np.double)*(1.0/np.max(label))
+        #io.imsave(fname[(fname.rfind('/')+1):-1]+'.label.png',CMAP(labelimg))
+        roi_stats = crimg.roi_stats(label,mask_lap)
+        print roi_stats
         k = k + 1
-plt.show()
+#plt.show()
