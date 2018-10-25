@@ -20,6 +20,7 @@ static PyObject *mask_laplacian       (PyObject *self, PyObject *args);
 static PyObject *mask_refine          (PyObject *self, PyObject *args); 
 static PyObject *roi_label            (PyObject *self, PyObject *args); 
 static PyObject *roi_stats            (PyObject *self, PyObject *args); 
+static PyObject *roi_filter           (PyObject *self, PyObject *args); 
 
 
 /*****************************************************************************
@@ -38,6 +39,7 @@ static PyMethodDef methods[] = {
   { "mask_refine", mask_refine, METH_VARARGS, "Assign CR score to each ROI"},
   { "roi_label", roi_label, METH_VARARGS, "Image labeling"},
   { "roi_stats", roi_stats, METH_VARARGS, "Statistics of the different ROIs as defined by the labeling image"},
+  { "roi_filter", roi_filter, METH_VARARGS, "Filter out ROIs"},
   { NULL, NULL, 0, NULL } /* Sentinel */
 };
 //
@@ -618,7 +620,6 @@ static PyObject *roi_stats(PyObject *self, PyObject *args) {
   //
   // first pass over label image: find N
   //
-  printf(" first pass over label.\n");
   npy_intp N = 0;
   PyArrayIterObject *iter = (PyArrayIterObject *)PyArray_IterNew((PyObject*)py_Lab);
   while (PyArray_ITER_NOTDONE(iter)) {
@@ -636,33 +637,28 @@ static PyObject *roi_stats(PyObject *self, PyObject *args) {
   //
   // second pass over label: compute the size of each ROI  in first col of py_S
   //
-  printf(" second pass over label.\n");
   iter = (PyArrayIterObject *)PyArray_IterNew((PyObject*)py_Lab);
   while (PyArray_ITER_NOTDONE(iter)) {
     const npy_intp l = *((npy_uint32*)PyArray_ITER_DATA(iter));
-    if (l)
+    if (l) {
       (*((npy_uint32*)PyArray_GETPTR2(py_S,l,0)))++;
-    (*((npy_uint32*)PyArray_GETPTR2(py_S,0,0)))++;
+      (*((npy_uint32*)PyArray_GETPTR2(py_S,0,0)))++;
+    }
     PyArray_ITER_NEXT(iter);
   }
   desc = PyArray_DESCR(py_Lap);
   typecode = desc->type_num;
-  printf(" laplacian.\n");
   switch (typecode) {
   case NPY_UINT8: case NPY_BOOL:
-    printf("8 bit\n");
     _roi_stats_8(py_Lab, py_Lap, py_S);
     break;
   case NPY_UINT16:
-    printf("16 bit\n");
     _roi_stats_16(py_Lab, py_Lap, py_S);
     break;
   case NPY_UINT32:
-    printf("32 bit\n");
     _roi_stats_32(py_Lab, py_Lap, py_S);
     break;
   case NPY_UINT64:
-    printf("64 bit\n");
     _roi_stats_64(py_Lab, py_Lap, py_S);
     break;
   default:
@@ -677,7 +673,7 @@ int npy_uint32_comp(const void*a , const void* b) { return (long) *((npy_uint32*
 static void _roi_stats_16(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayObject* py_S) {
   const npy_intp M = PyArray_DIM(py_Lab,0);
   const npy_intp N = PyArray_DIM(py_Lab,1);
-  const npy_intp L = PyArray_DIM(py_S,0);
+  const npy_intp L = PyArray_DIM(py_S,0)-1;
   npy_uint16*    rLap = PyArray_DATA(py_Lap); // only change for different input types
   npy_intp       sLap = PyArray_STRIDE(py_Lap,0)/2;
 
@@ -687,7 +683,6 @@ static void _roi_stats_16(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayO
   npy_uint32*    rS = PyArray_DATA(py_S);
   npy_intp       sS = PyArray_STRIDE(py_S,0)/4;
 
-  printf("Creating auxiliary structures.\n");
   //
   // auxiliary struct: list of samples of each roi
   //
@@ -700,7 +695,6 @@ static void _roi_stats_16(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayO
     else
       roi_samples[l] = NULL;
   }
-  printf("Collecting samples.\n");
   //
   // main loop: collect samples for each roi
   //
@@ -710,7 +704,6 @@ static void _roi_stats_16(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayO
       if (!roi) {
 	continue;
       }
-      printf("L=%lu i=%lu j=%lu roi=%lu\n",L,i,j,roi);
       roi_samples[ roi ][ roi_counter[roi]++ ] = rLap[j];
       roi_samples[ 0 ][ roi_counter[0]++ ] = rLap[j];
     }
@@ -719,7 +712,6 @@ static void _roi_stats_16(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayO
   //
   // sort samples for each roi; fill in corresponding data in py_S
   //
-  printf("Processing samples.\n");
   for (npy_intp l = 0; l <= L; l++, rS += sS) {
     size_t roi_size = rS[0];
     if (!roi_size) continue;
@@ -730,21 +722,22 @@ static void _roi_stats_16(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayO
     rS[1] = samples[0]; //min
     rS[2] = samples[roi_size/10]; // p10
     rS[3] = samples[roi_size/4]; // p25
-    rS[5] = samples[roi_size/2]; // p50
-    rS[6] = samples[3*roi_size/4]; // p75
-    rS[7] = samples[9*roi_size/10]; // p90
-    npy_uint32 mean = 0;
+    rS[4] = samples[roi_size/2]; // p50
+    rS[5] = samples[3*roi_size/4]; // p75
+    rS[6] = samples[9*roi_size/10]; // p90
+    rS[7] = samples[roi_size-1]; // p100
+    double mean = 0;
     for (npy_intp i = 0; i < roi_size; i++)
       mean += samples[i];
-    mean /= roi_size;
+    mean /= (double)roi_size;
     double std = 0;
     double tmp = 0;
     for (npy_intp i = 0; i < roi_size; i++) {
-      tmp = samples[i] - mean;
+      tmp = (double) samples[i] - mean;
       std += tmp*tmp;
     }
-    std /= roi_size;
-    rS[8] = mean; 
+    std /= (double)roi_size;
+    rS[8] = (npy_uint32) mean; 
     rS[9] = (npy_uint32) sqrt(std); 
   }
   //
@@ -794,7 +787,7 @@ static void _roi_stats_8(PyArrayObject* py_Lab, PyArrayObject* py_Lap, PyArrayOb
   //
   // sort samples for each roi; fill in corresponding data in py_S
   //
-  for (npy_intp l = 0; l < L; l++, rS += sS) {
+  for (npy_intp l = 0; l <= L; l++, rS += sS) {
     size_t roi_size = rS[0];
     npy_uint32* samples = roi_samples[l];
     if (roi_size > 1) {
@@ -834,6 +827,52 @@ static void _roi_stats_32(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObjec
 }
 
 static void _roi_stats_64(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L) {
+}
+
+//
+//--------------------------------------------------------
+// roi_stats
+//--------------------------------------------------------
+//
+
+static PyObject *roi_filter(PyObject *self, PyObject *args) {
+  PyArrayObject *py_L, *py_F, *py_L2;
+  if(!PyArg_ParseTuple(args, "O!O!", &PyArray_Type, &py_L,  &PyArray_Type, &py_F)) {
+    return NULL;
+  }
+  //
+  // type checking
+  //
+  // label image:
+  PyArray_Descr* desc = PyArray_DESCR(py_L);
+  desc = PyArray_DESCR(py_L);
+  char typecode = desc->type_num;
+  if (typecode != NPY_UINT32) {
+    PyErr_Warn(PyExc_Warning,"Label must be numpy.uint32.");
+    return NULL;
+  }
+
+  desc = PyArray_DESCR(py_F);
+  typecode = desc->type_num;
+  if ((typecode != NPY_UINT8) && (typecode != NPY_BOOL)) {
+    PyErr_Warn(PyExc_Warning,"Filter must be numpy.uint8 or numpy.bool.");
+    return NULL;
+  }
+
+  py_L2 = (PyArrayObject*) PyArray_SimpleNew(PyArray_NDIM(py_L),PyArray_DIMS(py_L),NPY_UINT32);
+
+  PyArrayIterObject* iter1 = (PyArrayIterObject *)PyArray_IterNew((PyObject*)py_L);
+  PyArrayIterObject* iter2 = (PyArrayIterObject *)PyArray_IterNew((PyObject*)py_L2);
+  npy_uint8* pf = (npy_uint8*) PyArray_DATA(py_F);
+  
+  while (PyArray_ITER_NOTDONE(iter1)) {
+    npy_intp l = *((npy_uint32*)PyArray_ITER_DATA(iter1));
+    *((npy_uint32*)PyArray_ITER_DATA(iter2)) =  (l && pf[l]) ? l : 0;
+    PyArray_ITER_NEXT(iter1);
+    PyArray_ITER_NEXT(iter2);
+  }
+  
+  return PyArray_Return(py_L2);  
 }
 
 //--------------------------------------------------------
