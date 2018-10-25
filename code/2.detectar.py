@@ -7,15 +7,10 @@ import pnmgz
 import sys
 import crimg
 
+CMAP = plt.get_cmap('nipy_spectral')
 DATADIR = '../data/'
 RESDIR = '../results/'
 EXT='.fits'
-cmd = 'mkdir -p ' + RESDIR + 'cielo'
-print cmd
-os.system(cmd)
-cmd = 'mkdir -p ' + RESDIR + 'dark'
-print cmd
-os.system(cmd)
 k = 0
 plt.close('all')
 
@@ -24,21 +19,16 @@ if len(sys.argv) > 1:
 else:
     lista = "cielo_sep.txt"
 
-CMAP = plt.get_cmap('nipy_spectral')
-
-#plt.figure(3)
-#T = io.imread('../data/closure_test.png').astype(np.uint8)
-#plt.subplot(121)
-#plt.imshow(T.astype(np.double),cmap=CMAP)
-
-#TC = crimg.binary_closure(T)
-#plt.subplot(122)
-#plt.imshow(TC.astype(np.double))
-
-#plt.show()
 with open(DATADIR+lista) as filelist:
     for fname  in filelist:
-        print fname,
+        fname = fname[:-1] 
+        fpath = fname[:(fname.rfind('/')+1)]
+        print fpath
+        if not os.path.exists(RESDIR + fpath):
+            os.system("mkdir -p " + RESDIR + fpath)
+        fbase = fname[(fname.rfind('/')+1):fname.rfind('.')]
+        fprefix = RESDIR + fpath + fbase
+        print fname,fpath,fbase,fprefix,
         img = fitsio.read(DATADIR+fname).astype(np.uint16)
         hist = crimg.discrete_histogram(img)
         chist = np.cumsum(hist)
@@ -57,15 +47,14 @@ with open(DATADIR+lista) as filelist:
         chist = np.cumsum(hist)
         med = np.flatnonzero(chist > N/2)[0]
         print 'median=',med
-        io.imsave(fname[(fname.rfind('/')+1):-1]+'.log.png',CMAP(limg))
+        io.imsave(fprefix +'-log.png',CMAP(limg))
         mask = (limg > (med+12)) # great threshold!
-        #io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask.png',mask*255)
         mask = crimg.binary_closure(mask) # closure
         mask = crimg.binary_closure(mask) # closure
-        #io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask-closure.png',mask*255)
+        pnmgz.imwrite(fprefix + "-mask1.pbm.gz",mask,1)
         mask_lap = crimg.mask_laplacian(limg, mask);
         mask_lap_img = mask_lap.astype(np.double)*(1.0/np.max(mask_lap))
-        io.imsave(fname[(fname.rfind('/')+1):-1]+'.mask-laplacian.png',CMAP(mask_lap_img))
+        io.imsave(fprefix +'.mask-laplacian.png',CMAP(mask_lap_img))
         #plt.figure(2,figsize=(10,10))
         #plt.semilogy(hist,'*-')
         #plt.figure(3,figsize=(10,10))
@@ -73,7 +62,7 @@ with open(DATADIR+lista) as filelist:
         roi_label = crimg.roi_label(mask)
         print np.max(roi_label)
         label_img = roi_label.astype(np.double)*(1.0/np.max(roi_label))
-        #io.imsave(fname[(fname.rfind('/')+1):-1]+'.label.png',CMAP(label_img))
+        io.imsave(fprefix + '-label.png',CMAP(label_img))
         roi_stats = crimg.roi_stats(roi_label,mask_lap)
         #
         # filter out roi's based on stats
@@ -98,6 +87,8 @@ with open(DATADIR+lista) as filelist:
         print "# filtered ROIs",np.sum(roi_mask)
         roi_label_filtered     = crimg.roi_filter(roi_label,roi_mask)
         roi_label_filtered_img = roi_label_filtered.astype(np.double)*(1.0/np.max(roi_label_filtered))
-        io.imsave(fname[(fname.rfind('/')+1):-1]+'.filtered.png',CMAP(roi_label_filtered_img))
+        io.imsave(fprefix + '-filtered.png',CMAP(roi_label_filtered_img))
+        pnmgz.imwrite(fprefix + '-mask2.pbm.gz',(roi_label_filtered_img > 0),1)
+        np.savez(fprefix + '-stats.npz',roi_stats)
         k = k + 1
 #plt.show()
