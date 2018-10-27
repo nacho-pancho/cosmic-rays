@@ -21,74 +21,145 @@ else:
 
 with open(DATADIR+lista) as filelist:
     for fname  in filelist:
+        #
+        # boilerplate, file input/output preparation
+        #
         fname = fname[:-1] 
         fpath = fname[:(fname.rfind('/')+1)]
-        print fpath
         if not os.path.exists(RESDIR + fpath):
             os.system("mkdir -p " + RESDIR + fpath)
         fbase = fname[(fname.rfind('/')+1):fname.rfind('.')]
         fprefix = RESDIR + fpath + fbase
-        print fname,fpath,fbase,fprefix,
+        #print fname,fpath,fbase,fprefix,
+        print fname,
+        #
+        # load original, unfiltered image
+        #
         img = fitsio.read(DATADIR+fname).astype(np.uint16)
+        #
+        # transform so that its percentile 10 is mapped to 0
+        # and its maximum to approximately 255, in logarithmic scale
+        #
         hist = crimg.discrete_histogram(img)
         chist = np.cumsum(hist)
         N = img.shape[0]*img.shape[1]
-        base = np.flatnonzero(chist)[0]
-        #print 'median=',med
-        #mask = (img > (med+100))
-        #print 'nz=',np.count_nonzero(mask)
-        #plt.figure(1)
-        #plt.semilogy(hist)
-        img = np.maximum(img - base,0)
-        #limg = crimg.discrete_log2rootk(img,2)
+        base = np.flatnonzero(chist > (N/10))[0]
+        img = np.maximum(img - base,1)
+        #
+        # the base of the logarithm is 2^(1/16)
+        #
         limg = np.round(16.0*np.log2(img.astype(np.double))).astype(np.uint8)
-        #print np.unique(limg),
+        #
+        # compute the discrete histogram of the log-transformed image
+        #
         hist = crimg.discrete_histogram(limg)
         chist = np.cumsum(hist)
-        med = np.flatnonzero(chist > N/2)[0]
-        print 'median=',med
+        hist = hist.astype(np.double)*(1.0/chist[-1])
+        chist = chist.astype(np.double)*(1.0/chist[-1])
+        #
+        # show histograms
+        #
+        plt.figure(1,figsize=(10,15))
+        plt.semilogy(hist,'*-')
+        plt.semilogy(chist,'*-')
+        plt.savefig(fprefix + '-hist.png')
+        #
+        #
+        #
+        med = np.flatnonzero(chist > 0.5)[0]
+        thres = np.flatnonzero(chist > 0.975)[0]
+        print 'median=',med,
+        print 'thres=',thres
         io.imsave(fprefix +'-log.png',CMAP(limg))
-        mask = (limg > (med+12)) # great threshold!
-        mask = crimg.binary_closure(mask) # closure
-        mask = crimg.binary_closure(mask) # closure
+        #
+        # first  binary classification mask, crude
+        # the marked regions are referred to as ROI (Region Of Interest)
+        mask = (limg > thres) #
+        #
+        # close holes using morphological operations 
+        #
+        mask = crimg.binary_closure(mask) 
+        mask = crimg.binary_closure(mask) 
         pnmgz.imwrite(fprefix + "-mask1.pbm.gz",mask,1)
+        #
+        # compute Laplacian on ROIs
+        #
         mask_lap = crimg.mask_laplacian(limg, mask);
         mask_lap_img = mask_lap.astype(np.double)*(1.0/np.max(mask_lap))
         io.imsave(fprefix +'.mask-laplacian.png',CMAP(mask_lap_img))
-        #plt.figure(2,figsize=(10,10))
-        #plt.semilogy(hist,'*-')
-        #plt.figure(3,figsize=(10,10))
-        #plt.semilogy(chist,'*-')
+        #
+        # assign a unique label to each ROI
+        #
         roi_label = crimg.roi_label(mask)
-        print np.max(roi_label)
-        label_img = roi_label.astype(np.double)*(1.0/np.max(roi_label))
-        io.imsave(fprefix + '-label.png',CMAP(label_img))
+        #
+        # save it (for debugging purposes)
+        #
+        roi_img = roi_label.astype(np.double)*(1.0/np.max(roi_label))
+        io.imsave(fprefix + '-label1.png',CMAP(roi_img))
+        #
+        # Compute various statistics for each ROI.
+        # For each ROI, the statistics are:
+        #  0    1   2   3   4   5   6    7   8    9
+        # size p00 p10 p25 p50 p75 p90 p100 mean std
+        #
+        # row 0 contains the aforementioned values for the union of all ROI's
+        #
         roi_stats = crimg.roi_stats(roi_label,mask_lap)
+        np.savez(fprefix + '-roi-stats1.npz',roi_stats)
+        #print roi_stats[0,:]
         #
         # filter out roi's based on stats
         #
-        # each roi_stats row consists of
-        #  0    1   2   3   4   5   6    7   8    9
-        # size p00 p10 p25 p50 p75 p90 p100 mean std
-        # row 0 contains these values for the union of all ROI's; these
-        # may be useful for classifying 1-pixel ROIs
+        # first we create a vector of length L+1 called roi_mask
+        # a 1 in the l-th position of roi_mask indicates that ROI l is to be kept;
+        # a  0 indicates that it should be filtered out
         #
-        # roi_mask below is a vector with L+1 elements where a 1 in the l-th position
-        # indicates that ROI l is to be kept, and 0 indicates that it should be filtered out
+        roi_mask = np.empty(roi_stats.shape[0])
+        # many criteria are possible. Below we give a sample filtering criterion:
+        # keep all ROIs whose 75th percentile (5th column) is at least 10% of the global
+        # ROI maximum (0th column of global stats = row 0)
         #
-        # below we give a sample filtering criterion: we keep those areas where p90-p50 < p50-p10
-        # that is, the median is significantly closer to the maximum (p90 is more robust) 
-        # than to the minimum
+        # one-pixel ROIs have no "stats" but one value; in this case we compare to
+        # a lower threshold
         #
-        roi_mask = np.zeros(roi_stats.shape[0])
-        print roi_stats[0,:]
         print "# unfiltered ROIs",np.sum(roi_stats[:,0] > 0)
-        roi_mask = (roi_stats[:,5] >= 0.1*roi_stats[0,7]) 
+        p50 = roi_stats[0,4]
+        p75 = roi_stats[0,5]
+        p90 = roi_stats[0,6]
+        p100 = roi_stats[0,7]        
+        roi_mask = roi_stats[:,5] > p50
         print "# filtered ROIs",np.sum(roi_mask)
-        roi_label_filtered     = crimg.roi_filter(roi_label,roi_mask)
-        roi_label_filtered_img = roi_label_filtered.astype(np.double)*(1.0/np.max(roi_label_filtered))
-        io.imsave(fprefix + '-filtered.png',CMAP(roi_label_filtered_img))
-        pnmgz.imwrite(fprefix + '-mask2.pbm.gz',(roi_label_filtered_img > 0),1)
-        np.savez(fprefix + '-stats.npz',roi_stats)
+        singletons = roi_stats[:,0] <= 2
+        roi_mask[singletons]  = (roi_stats[singletons,4] > p90)
+        print "# filtered ROIs",np.sum(roi_mask)
+        #
+        # filter out ROIs using the defined roi_mask vector
+        #
+        roi_label     = crimg.roi_filter(roi_label,roi_mask)
+        # refine binary mask
+        mask = roi_label > 0
+        pnmgz.imwrite(fprefix + '-mask2.pbm.gz',mask,1)
+        #
+        # save filtered labeled ROI pseudo-image
+        #
+        roi_img = roi_label.astype(np.double)*(1.0/np.max(roi_label))
+        io.imsave(fprefix + '-label2.png',CMAP(roi_img))
+        #
+        # compute and save stats of filtered ROIs in logarithmic scale
+        #
+        roi_stats = crimg.roi_stats(roi_label,mask_lap)
+        np.savez(fprefix + '-roi-stats2.npz',roi_stats)        
         k = k + 1
+        #
+        # finally, compute and save histograms of filtered ROIs and
+        # their complement in original image scale
+        # 
+        # this is for inpainting ROIs in input images
+        # in and properly superimposing CRs on clean images
+        #
+        hist = crimg.discrete_histogram(img[mask > 0])
+        np.savez(fprefix + '-roi-hist2.npz',hist)        
+        hist = crimg.discrete_histogram(img[mask == 0])
+        np.savez(fprefix + '-non-roi-hist2.npz',chist)        
+        
 #plt.show()
