@@ -1,0 +1,14 @@
+cielo/iaby01kbq_raw.fits 01
+cielo/iaby01keq_raw.fits 02
+cielo/iaby01kjq_raw.fits 03
+cielo/ib5d06gxq_raw.fits 04
+cielo/ib5d07hkq_raw.fits 05
+cielo/ib5d12c8q_raw.fits 06
+cielo/ibla02tgq_raw.fits 07
+cielo/ibla02tjq_raw.fits 08
+cielo/ibla02tmq_raw.fits 09 
+cielo/ibu530rzq_raw.fits 10 
+cielo/ibu530tfq_raw.fits 11
+cielo/ibu540yiq_raw.fits 12
+cielo/idfr02cgq_raw.fits 13 
+cielo/idfr19wmq_raw.fits 14
