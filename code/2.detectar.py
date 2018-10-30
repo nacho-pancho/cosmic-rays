@@ -1,7 +1,8 @@
 import fitsio
 import matplotlib.pyplot as plt
 import numpy as np
-from skimage import io
+#from skimage import io
+import tifffile as tif
 import os
 import pnmgz
 import sys
@@ -17,10 +18,11 @@ plt.close('all')
 if len(sys.argv) > 1:
     lista = sys.argv[1]
 else:
-    lista = "cielo_sep.txt"
+    lista = "cielo_sel.txt"
 
 with open(DATADIR+lista) as filelist:
     for fname  in filelist:
+        plt.close('all')
         #
         # boilerplate, file input/output preparation
         #
@@ -62,15 +64,15 @@ with open(DATADIR+lista) as filelist:
         plt.figure(1,figsize=(10,15))
         plt.semilogy(hist,'*-')
         plt.semilogy(chist,'*-')
-        plt.savefig(fprefix + '-1.hist.png')
+        plt.savefig(fprefix + '-1.hist.tiff')
         #
         #
         #
         med = np.flatnonzero(chist > 0.5)[0]
-        thres = 64 # empirically observed 
+        thres = 50 # empirically observed 
         print 'median=',med,
         print 'thres=',thres
-        io.imsave(fprefix +'-2.log.png',limg)
+        tif.imsave(fprefix +'-2.log.tiff',limg)
         #
         # first  binary classification mask, crude
         # the marked regions are referred to as ROI (Region Of Interest)
@@ -78,16 +80,23 @@ with open(DATADIR+lista) as filelist:
         #
         # close holes using morphological operations 
         #
+        prev_mask = np.copy(mask)
         mask = crimg.binary_closure(mask) 
-        mask = crimg.binary_closure(mask) 
+        dif = np.sum(np.abs(prev_mask-mask))
+        while dif:
+            np.copyto(prev_mask,mask)
+            mask = crimg.binary_closure(mask) 
+            dif = np.sum(np.abs(prev_mask-mask))
+            #print 'dif=',dif
         pnmgz.imwrite(fprefix + "-3.mask1.pbm.gz",mask,1)
-        io.imsave(fprefix + '-3.mask1.tiff',mask.astype(np.uint8)*255)
+        #tif.imsave(fprefix + '-3.mask1.tiff',mask.astype(np.uint8)*255)
+        tif.imsave(fprefix + '-3.mask1.tiff',mask.astype(np.uint8)*255)
         #
         # compute Laplacian on ROIs
         #
         mask_lap = crimg.mask_laplacian(limg, mask);
-        mask_lap_img = mask_lap.astype(np.double)*(1.0/np.max(mask_lap))
-        io.imsave(fprefix +'-4.roi_lap.png',mask_lap_img)
+        mask_lap_img = mask_lap.astype(np.double)*(255.0/np.max(mask_lap))
+        tif.imsave(fprefix +'-4.roi_lap.tiff',mask_lap_img.astype(np.uint8))
         #
         # assign a unique label to each ROI
         #
@@ -111,7 +120,7 @@ with open(DATADIR+lista) as filelist:
         plt.figure(2,figsize=(10,15))
         plt.loglog(hist,'*-')
         plt.loglog(np.cumsum(hist),'*-')
-        plt.savefig(fprefix + '-5.roi-hist1.png')
+        plt.savefig(fprefix + '-5.roi-hist1.tiff')
 
         roi_stats = crimg.roi_stats(roi_label,mask_lap)
         np.savez(fprefix + '-6.roi-stats1.npz',roi_stats)
@@ -125,22 +134,24 @@ with open(DATADIR+lista) as filelist:
         #
         roi_mask = np.empty(roi_stats.shape[0])
         # many criteria are possible. Below we give a sample filtering criterion:
-        # keep all ROIs whose 75th percentile (5th column) is at least 10% of the global
-        # ROI maximum (0th column of global stats = row 0)
         #
-        # one-pixel ROIs have no "stats" but one value; in this case we compare to
-        # a lower threshold
-        #
-        print "# unfiltered ROIs",np.sum(roi_stats[:,0] > 0)
+        print "# unfiltered ROIs in mask 1:",np.sum(roi_stats[:,0] > 0)
         p50 = roi_stats[0,4]
         p75 = roi_stats[0,5]
         p90 = roi_stats[0,6]
         p100 = roi_stats[0,7]        
-        roi_mask = roi_stats[:,5] > p50
-        print "# filtered ROIs",np.sum(roi_mask)
-        singletons = roi_stats[:,0] <= 2
-        roi_mask[singletons]  = (roi_stats[singletons,4] > p90)
-        print "# filtered ROIs",np.sum(roi_mask)
+        thres2 = 70
+        #
+        # large regions are considered CRs if their 75th percentile is above 70 in log scale
+        #
+        roi_mask = roi_stats[:,5] > thres2
+        print "# after filtering large ROIs:",np.sum(roi_mask)
+        #
+        # small regions (<= 4 pixels) are considered CRs if their 25th percentile is above 140
+        #
+        singletons = roi_stats[:,0] <= 4 
+        roi_mask[singletons]  = (roi_stats[singletons,3] > 140) 
+        print "# after filtering small ROIs:",np.sum(roi_mask)
         #
         # filter out ROIs using the defined roi_mask vector
         #
@@ -148,7 +159,7 @@ with open(DATADIR+lista) as filelist:
         # refine binary mask
         mask = roi_label > 0
         pnmgz.imwrite(fprefix + '-7.mask2.pbm.gz',mask,1)
-        io.imsave(fprefix + '-3.mask2.tiff',mask.astype(np.uint8)*255)
+        tif.imsave(fprefix + '-3.mask2.tiff',mask.astype(np.uint8)*255)
         #
         # save filtered labeled ROI pseudo-image
         #
@@ -174,7 +185,7 @@ with open(DATADIR+lista) as filelist:
         plt.figure(3,figsize=(10,15))
         plt.loglog(hist,'*-')
         plt.loglog(np.cumsum(hist),'*-')
-        plt.savefig(fprefix + '-9-roi-hist2.png')
+        plt.savefig(fprefix + '-9-roi-hist2.tiff')
 
         hist = crimg.discrete_histogram(img[mask == 0])
         np.savez(fprefix + '-9.non-roi-hist2.npz',chist)        

@@ -1,4 +1,6 @@
 #
+# -*- coding: UTF-8 -*-
+#
 # Este script toma las imágenes "rellenadas" (nacho)
 # y genera una imagen de prueba superponiendo sobre ellas
 # los CRs obtenidos de los darks.
@@ -16,19 +18,22 @@
 import fitsio
 import matplotlib.pyplot as plt
 import numpy as np
-from skimage import io
 import os
 import pnmgz
 import sys
-import pnm
+import tifffile as tif
 
 DATADIR = '../data/'
 RESDIR = '../results/'
+OUTDIR = '../results/artif/'
 EXT='.fits'
 cmd = 'mkdir -p ' + RESDIR + 'cielo'
 print cmd
 os.system(cmd)
 cmd = 'mkdir -p ' + RESDIR + 'dark'
+print cmd
+os.system(cmd)
+cmd = 'mkdir -p ' + OUTDIR 
 print cmd
 os.system(cmd)
 k = 0
@@ -37,9 +42,9 @@ plt.close('all')
 if len(sys.argv) > 1:
     lista = sys.argv[1]
 else:
-    lista = "cielo_sep.txt"
+    lista = "cielo_sel.txt"
 
-darklistfile = "dark_sep.txt"
+darklistfile = "dark_sel.txt"
 
 plt.close('all')
 CMAP = plt.get_cmap('hot')
@@ -48,32 +53,45 @@ with open(DATADIR+lista) as filelist:
         img = fitsio.read(DATADIR + fname).astype(np.double)
         fbase = fname[:-6]
         fbase2 = fbase[(fbase.rfind('/')+1):]
-        print fbase, fbase2
-        print DATADIR + darklistfile
-        d = 0
+        #print DATADIR + darklistfile
+        d = 1
         with open(DATADIR + darklistfile) as darklist:
+            plt.close('all')
             for fdark in darklist:
-                img = fitsio.read(DATADIR + fbase + "-nacho.fits").astype(np.double)
+                #
+                # read filled in image
+                #
+                sky = fitsio.read(DATADIR + fbase + "-filled.fits").astype(np.double)
+                #
+                # read the empirical distribution of its (erased) CRs
+                #
+                sky_roi_hist = np.load(RESDIR + fbase + '-9.roi-hist2.npz')['arr_0']
+                #
+                # read dark frame from which we will superimpose our "ground truth CRs"
+                #
                 dark = fitsio.read(DATADIR + fdark).astype(np.double)
-                darkbase = fdark[5:-6]
-                print darkbase
-                mask = pnmgz.imread(RESDIR + fbase + '-mask.pbm.gz')
+                darkbase = fdark[:-6]
+                darkbase2 = fdark[(darkbase.rfind('/')+1):-6]
+                print "sky=",fbase2, "dark=",darkbase2
+                dark_mask = pnmgz.imread(RESDIR + darkbase + '-7.mask2.pbm.gz').astype(np.bool)
+                dark_roi_hist = np.load(RESDIR + darkbase + '-9.roi-hist2.npz')['arr_0']
+                #plt.figure(d*2)
+                #plt.loglog(sky_roi_hist[90:])
+                #plt.loglog(dark_roi_hist[90:])
+                #plt.grid(True)
+                #plt.legend(('sky','dark'))
+                #plt.show()
                 #
-                # procesamiento
+                # processing: must match distributions (PENDING)
                 #
-                img2 = np.copy(img)
-                sorted_dark = np.sort(dark.ravel())
-                sorted_img  = np.sort(img.ravel())
-                p10d = sorted_dark[len(sorted_dark)/10]
-                p10i = sorted_img[len(sorted_img)/10]
-                img2[mask == 0] = img2[mask == 0] + ( 35.0/900.0)*(dark[mask == 0]-p10d)
-                fitsio.write(RESDIR+fbase+"-"+darkbase+"-artif.fits",img2)
-                img2 = np.log(img2-np.min(img2)+1)
-                img2 = (1.0/np.max(img2))*img2
-                io.imsave(RESDIR+fbase+"-"+darkbase+"-artif.png",img2)
+                sky2 = np.copy(sky)
+                #fitsio.write(OUTDIR+fbase2+"+"+darkbase2+"-artif.fits",sky2)
+                sky2 = np.log(sky2-np.min(sky2)+1)
+                sky2 = (255.0/np.max(sky2))*sky2
+                tif.imsave(OUTDIR + fbase2+"+"+darkbase2+"-artif-log.tiff",sky2.astype(np.uint8))
                 if d == -1:
                     plt.figure()
-                    plt.imshow(np.log(img2-np.min(img2)+1),cmap=CMAP)
+                    plt.imshow(np.log(sky2-np.min(sky2)+1),cmap=CMAP)
                 d = d + 1
         k = k + 1
 plt.show()

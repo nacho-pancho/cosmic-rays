@@ -12,7 +12,7 @@ import pnm
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage import morphology as morph
-from skimage import io
+import tifffile as tif
 import sys
 import pnmgz
 
@@ -28,20 +28,20 @@ plt.close('all')
 if len(sys.argv) > 1:
     lista = sys.argv[1]
 else:
-    lista = "cielo_sep.txt"
+    lista = "cielo_sel.txt"
 
 with open(DATADIR+lista) as filelist:
     for fname  in filelist:
-        img = fitsio.read(DATADIR+fname).astype(np.double)
+        img = fitsio.read(DATADIR+fname)
         img_filled = np.copy(img)
         fbase = fname[:-len(EXT)-1]
         fbase2 = fbase[fbase.rfind('/')+1:]
-        mask = pnmgz.imread(RESDIR + fbase + '-mask.pbm.gz')
-#        mask = morph.binary_dilation(mask,NHOOD) # para operaciones morfologicas
-        flap = RESDIR + fbase + '-mask.pbm.gz'
-        pnmgz.imwrite(flap,mask,1)
-        flap = RESDIR + fbase + '-mask.png'
-        io.imsave(flap, mask.astype(np.double))
+        mask = pnmgz.imread(RESDIR + fbase + '-7.mask2.pbm.gz')
+#       mask = morph.binary_dilation(mask,NHOOD) # para operaciones morfologicas
+        #flap = RESDIR + fbase + '-mask.pbm.gz'
+        #pnmgz.imwrite(flap,mask,1)
+        #flap = RESDIR + fbase + '-mask3.tiff'
+        #tif.imsave(flap, mask.astype(np.uint8)*255)
         img_bg = img[mask==False].ravel()
         img_bg_s = np.sort(img_bg)
         n = len(img_bg_s)
@@ -54,9 +54,9 @@ with open(DATADIR+lista) as filelist:
                 idx = np.int(a*n/2)
                 v = img_bg_s[idx]
                 img_filled[i,j] = v
-        fitsio.write(DATADIR + fbase + '-nacho.fits', img_filled)
+        fitsio.write(DATADIR + fbase + '-filled.fits', img_filled)
         preview = np.log(img_filled-np.min(img_filled)+1)
-        preview = preview*(1.0/np.max(preview.ravel()))
-        flap = RESDIR + fbase + '-nacho.png'
-        io.imsave(flap,preview)
+        preview = preview*(255.0/np.max(preview.ravel()))
+        flap = RESDIR + fbase + '-filled.tiff'
+        tif.imsave(flap,preview.astype(np.uint8))
         plt.show()
