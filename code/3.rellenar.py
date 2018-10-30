@@ -28,7 +28,7 @@ plt.close('all')
 if len(sys.argv) > 1:
     lista = sys.argv[1]
 else:
-    lista = "cielo_sel.txt"
+    lista = "sky_sep.list"
 
 with open(DATADIR+lista) as filelist:
     for fname  in filelist:

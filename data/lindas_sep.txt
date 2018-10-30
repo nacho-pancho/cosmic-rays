@@ -1,6 +1,0 @@
-cielo/linda1.2.fits
-cielo/linda2.1.fits
-cielo/linda3.1.fits
-cielo/linda3.2.fits
-cielo/linda1.1.fits
-cielo/linda2.2.fits

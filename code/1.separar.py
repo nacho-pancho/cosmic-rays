@@ -15,7 +15,7 @@ k = 0
 if len(sys.argv) > 1:
     flist = sys.argv[1]
 else:
-    flist = 'cielo.txt'
+    flist = 'all.list'
 
 with open(DATADIR+flist) as filelist:
         for fname  in filelist:

@@ -1,8 +1,0 @@
-dark/dark_02.2.fits
-dark/dark_04.2.fits
-dark/dark_04.1.fits
-dark/dark_03.1.fits
-dark/dark_01.1.fits
-dark/dark_01.2.fits
-dark/dark_02.1.fits
-dark/dark_03.2.fits
