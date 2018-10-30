@@ -22,6 +22,7 @@ import os
 import pnmgz
 import sys
 import tifffile as tif
+import crimg
 
 DATADIR = '../data/'
 RESDIR = '../results/'
@@ -95,16 +96,17 @@ with open(DATADIR+lista) as filelist:
                 # processing: must match distributions (PENDING)
                 #                
                 sky2 = np.copy(sky)
+                #crimg.paste_cr(dark,dark_mask,sky2)
                 
                 M,N = dark.shape
                 for i in range(M):
-                    for j in range(N):
-                        if dark_mask[i,j]:
-                            d = dark[i,j]
-                            q = Fd[d] # q = F[d]                            
-                            sky2[i,j] = np.flatnonzero(Fs >= q)[0] # s = F^-1[Fd[q]]
+                     for j in range(N):
+                         if dark_mask[i,j]:
+                             d = dark[i,j]
+                             q = Fd[d] # q = F[d]                            
+                             sky2[i,j] = np.flatnonzero(Fs >= q)[0] # s = F^-1[Fd[q]]
                 fitsio.write(outfile,sky2)
-                
+               
                 sky2 = np.log(sky2-np.min(sky2)+1)
                 sky2 = (255.0/np.max(sky2))*sky2
                 tif.imsave(OUTDIR + fbase2+"+"+darkbase2+"-artif-log.tiff",sky2.astype(np.uint8))

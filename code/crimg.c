@@ -331,7 +331,7 @@ static PyArrayObject* _discrete_histogram_16(PyArrayObject* py_X) {
 }
 
 static PyObject *discrete_histogram(PyObject *self, PyObject *args) {
-  PyArrayObject *py_I, *py_H;
+  PyArrayObject *py_I;
   // Parse arguments: image
   if(!PyArg_ParseTuple(args, "O!",
                        &PyArray_Type,
@@ -352,7 +352,7 @@ static PyObject *discrete_histogram(PyObject *self, PyObject *args) {
   case NPY_UINT16:
     return PyArray_Return(_discrete_histogram_16(py_I));
   default:
-      PyErr_Warn(PyExc_Warning,"Only 8 or 16 bit integers allowed.");
+      PyErr_Warn(PyExc_Warning,"Data type has to be either 8 or 16 bit unsigned integers.");
       return NULL;
   }
 }
@@ -892,35 +892,106 @@ static PyObject *roi_filter(PyObject *self, PyObject *args) {
 
 
 static PyObject *paste_cr(PyObject *self, PyObject *args) {
-  PyArrayObject *py_I, *py_M, *py_O;
+  PyArrayObject *py_dark, *py_mask, *py_sky;
   //
   // Parse arguments: input image, input CR mask, output image (overwritten)
   //
   if(!PyArg_ParseTuple(args, "O!O!O!",
                        &PyArray_Type,
-                       &py_I,
-                       &py_M,
-                       &py_O
+                       &py_dark,
+                       &PyArray_Type,
+                       &py_mask,
+                       &PyArray_Type,
+                       &py_sky
 		       )) {
     return NULL;
   }
-  PyArray_Descr* desc = PyArray_DESCR(py_I);
+  PyArray_Descr* desc = PyArray_DESCR(py_dark);
   if (desc->type_num != NPY_UINT16) {
     PyErr_Warn(PyExc_Warning,"Input image must be unsigned 16 bit integers (np.uint16).");
     return NULL;
   }
-  desc = PyArray_DESCR(py_O);
+  desc = PyArray_DESCR(py_sky);
   if (desc->type_num != NPY_UINT16) {
     PyErr_Warn(PyExc_Warning,"Data must be unsigned 16 bit integers (np.uint16).");
     return NULL;
   }
-  desc = PyArray_DESCR(py_M);
+  desc = PyArray_DESCR(py_mask);
   if ((desc->type_num != NPY_UINT8) && (desc->type_num != NPY_BOOL)) {
     PyErr_Warn(PyExc_Warning,"Mask must be numpy.uint8 or numpy.bool.");
     return NULL;
   }
-  
-  return PyArray_Return(py_O);
+  //
+  // first pass: compute histogram of ROIs of both images
+  //
+  const npy_intp MAXVAL = 1UL << 16;
+  double* Fdark = (double*) calloc(MAXVAL, sizeof(double));
+  double* Fsky = (double*) calloc(MAXVAL, sizeof(double));
+
+  const npy_intp M = PyArray_DIM(py_dark,0);
+  const npy_intp N = PyArray_DIM(py_dark,1);
+
+  const npy_intp sdark = PyArray_STRIDE(py_dark,0)/2;
+  const npy_intp smask = PyArray_STRIDE(py_mask,0)  ;
+  const npy_intp ssky = PyArray_STRIDE(py_sky,0)/2;
+
+  const npy_uint16* pdark = PyArray_DATA(py_dark);
+  const npy_uint8*  pmask = PyArray_DATA(py_mask);
+  npy_uint16* psky = PyArray_DATA(py_sky);
+
+  for (npy_intp i = 0; i < M; i++, pdark += sdark, pmask += smask, psky += ssky) {
+    for (npy_intp j = 0; j < N; j++) {
+      if (pmask[j]) {
+	Fdark[pdark[j]]++;
+	Fsky[psky[j]]++;
+      }
+    }
+  }
+  //
+  // cumsum
+  //
+  double Fi = 0, Fo = 0;
+  for (npy_intp i = 0; i < MAXVAL; i++) {
+    Fi += Fdark[i];
+    Fdark[i] = Fi;
+    Fo += Fsky[i];
+    Fsky[i] = Fo;
+  }
+  //
+  // normalization
+  //
+  const double Ki = 1.0/Fi, Ko = 1.0/Fo;
+  //printf("normalization Fi=%f, Fo=%f, Ki=%f Ko=%f.\n",Fi, Fo, Ki,Ko);
+  for (npy_intp i = 0; i < MAXVAL; i++) {
+    Fdark[i] *= Ki;
+    Fsky[i] *= Ko;
+    //printf("Fdark[%lu]=%f\t",i,Fdark[i]);
+    //printf("Fsky[%lu]=%f\n",i,Fsky[i]);
+  }
+  //
+  // now we have both empirical cumulative distribution functions; we can paste
+  // 
+  pdark = PyArray_DATA(py_dark);
+  pmask = PyArray_DATA(py_mask);
+  psky = PyArray_DATA(py_sky);
+  for (npy_intp i = 0; i < M; i++, pdark += sdark, pmask += smask, psky += ssky) {
+    for (npy_intp j = 0; j < N; j++) {
+      if (pmask[j]) {
+	const npy_uint16 d = pdark[j];
+	const double q = Fdark[d];
+	npy_uint16 x;
+	//printf("%lu %lu:  %u + %u ->",i,j,psky[j],d);
+	for (x = 0; x < MAXVAL; x++)
+	  if (Fsky[x] >= q) break;
+	psky[j] = x;
+	//printf(" %u\n",psky[j]);
+      }
+    }
+  }
+  free(Fsky);
+  free(Fdark);
+  Py_INCREF(py_sky);
+  return PyArray_Return(py_sky);
 }
 
 //--------------------------------------------------------
