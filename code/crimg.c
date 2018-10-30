@@ -290,7 +290,7 @@ static void _discrete_log2rootk_64(PyArrayObject* py_I, PyArrayObject* py_H, npy
 // discrete_histogram
 //--------------------------------------------------------
 //
-static PyArrayObject* _discrete_histogram_8(PyObject* py_X) {
+static PyArrayObject* _discrete_histogram_8(PyArrayObject* py_X) {
   npy_intp dim = ((npy_intp)1) << 8;
   PyArrayObject* py_H = (PyArrayObject*) PyArray_SimpleNew(1,&dim,NPY_INT64);
   //
@@ -310,7 +310,7 @@ static PyArrayObject* _discrete_histogram_8(PyObject* py_X) {
   return py_H;
 }
 
-static PyArrayObject* _discrete_histogram_16(PyObject* py_X) {
+static PyArrayObject* _discrete_histogram_16(PyArrayObject* py_X) {
   npy_intp dim = ((npy_intp)1) << 16;
   PyArrayObject* py_H = (PyArrayObject*) PyArray_SimpleNew(1,&dim,NPY_INT64);
   //
