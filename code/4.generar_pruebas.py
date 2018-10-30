@@ -60,7 +60,7 @@ with open(DATADIR+lista) as filelist:
             for fdark in darklist:
                 darkbase = fdark[:-6]
                 darkbase2 = fdark[(darkbase.rfind('/')+1):-6]
-                print "sky=",fbase2, "dark=",darkbase2
+                print "sky=",fbase2, "dark=",darkbase2,
                 outfile = OUTDIR+fbase2+"+"+darkbase2+"-artif.fits"
                 if os.path.exists(outfile):
                     print "ya calculado."
@@ -83,7 +83,8 @@ with open(DATADIR+lista) as filelist:
                 dark_roi_hist = np.load(RESDIR + darkbase + '-9.roi-hist2.npz')['arr_0']
                 Fd = np.cumsum(dark_roi_hist).astype(np.double)
                 Fd = Fd*(1.0/Fd[-1])
-                
+                #if len(Fs) < len(Fd):
+                #    Fs = np.concatenate(Fs,np.ones(len(Fd)-len(Fs)))
                 plt.figure(d*2)
                 plt.loglog(Fs)
                 plt.loglog(Fd)
@@ -100,7 +101,7 @@ with open(DATADIR+lista) as filelist:
                     for j in range(N):
                         if dark_mask[i,j]:
                             d = dark[i,j]
-                            q = Fd[d] # q = F[d]
+                            q = Fd[d] # q = F[d]                            
                             sky2[i,j] = np.flatnonzero(Fs >= q)[0] # s = F^-1[Fd[q]]
                 fitsio.write(outfile,sky2)
                 
@@ -111,5 +112,6 @@ with open(DATADIR+lista) as filelist:
                     plt.figure()
                     plt.imshow(np.log(sky2-np.min(sky2)+1),cmap=CMAP)
                 d = d + 1
+                print "pronto."
         k = k + 1
 plt.show()

@@ -21,6 +21,7 @@ static PyObject *mask_refine          (PyObject *self, PyObject *args);
 static PyObject *roi_label            (PyObject *self, PyObject *args); 
 static PyObject *roi_stats            (PyObject *self, PyObject *args); 
 static PyObject *roi_filter           (PyObject *self, PyObject *args); 
+static PyObject *paste_cr             (PyObject *self, PyObject *args); 
 
 
 /*****************************************************************************
@@ -40,6 +41,7 @@ static PyMethodDef methods[] = {
   { "roi_label", roi_label, METH_VARARGS, "Image labeling"},
   { "roi_stats", roi_stats, METH_VARARGS, "Statistics of the different ROIs as defined by the labeling image"},
   { "roi_filter", roi_filter, METH_VARARGS, "Filter out ROIs"},
+  { "paste_cr", paste_cr, METH_VARARGS, "Paste CRs from one image to another"},
   { NULL, NULL, 0, NULL } /* Sentinel */
 };
 //
@@ -288,6 +290,46 @@ static void _discrete_log2rootk_64(PyArrayObject* py_I, PyArrayObject* py_H, npy
 // discrete_histogram
 //--------------------------------------------------------
 //
+static PyArrayObject* _discrete_histogram_8(PyObject* py_X) {
+  npy_intp dim = ((npy_intp)1) << 8;
+  PyArrayObject* py_H = (PyArrayObject*) PyArray_SimpleNew(1,&dim,NPY_INT64);
+  //
+  // fill in the histogram
+  //
+  PyArray_FILLWBYTE(py_H,0);
+  PyArrayIterObject *iter = (PyArrayIterObject *)PyArray_IterNew((PyObject*)py_X);
+  if (iter == NULL) {
+    PyErr_Warn(PyExc_Warning,"Failed creating iterator??.");
+    return NULL;
+  }
+  while (PyArray_ITER_NOTDONE(iter)) {
+    const npy_intp x = *((npy_uint8*)PyArray_ITER_DATA(iter));
+    (*(npy_int64*)PyArray_GETPTR1(py_H, x))++;
+    PyArray_ITER_NEXT(iter);
+  }
+  return py_H;
+}
+
+static PyArrayObject* _discrete_histogram_16(PyObject* py_X) {
+  npy_intp dim = ((npy_intp)1) << 16;
+  PyArrayObject* py_H = (PyArrayObject*) PyArray_SimpleNew(1,&dim,NPY_INT64);
+  //
+  // fill in the histogram
+  //
+  PyArray_FILLWBYTE(py_H,0);
+  PyArrayIterObject *iter = (PyArrayIterObject *)PyArray_IterNew((PyObject*)py_X);
+  if (iter == NULL) {
+    PyErr_Warn(PyExc_Warning,"Failed creating iterator??.");
+    return NULL;
+  }
+  while (PyArray_ITER_NOTDONE(iter)) {
+    const npy_intp x = *((npy_uint16*)PyArray_ITER_DATA(iter));
+    (*(npy_int64*)PyArray_GETPTR1(py_H, x))++;
+    PyArray_ITER_NEXT(iter);
+  }
+  return py_H;
+}
+
 static PyObject *discrete_histogram(PyObject *self, PyObject *args) {
   PyArrayObject *py_I, *py_H;
   // Parse arguments: image
@@ -307,39 +349,13 @@ static PyObject *discrete_histogram(PyObject *self, PyObject *args) {
   npy_intp dim;
   switch (typecode) {
   case NPY_UINT8: case NPY_BOOL:
-    dim = 1<<8;
-    break;
+    return _discrete_histogram_8(py_I);
   case NPY_UINT16:
-    dim = 1<< 16;
-      break;
+    return _discrete_histogram_16(py_I);
   default:
       PyErr_Warn(PyExc_Warning,"Only 8 or 16 bit integers allowed.");
       return NULL;
   }
-  py_H = (PyArrayObject*) PyArray_SimpleNew(1,&dim,NPY_INT64);
-  //
-  // fill in the histogram
-  //
-  PyArray_FILLWBYTE(py_H,0);
-  PyArrayIterObject *iter = (PyArrayIterObject *)PyArray_IterNew((PyObject*)py_I);
-  if (iter == NULL) {
-    PyErr_Warn(PyExc_Warning,"Failed creating iterator??.");
-    return NULL;
-  }
-  if (typecode == NPY_UINT16) { 
-    while (PyArray_ITER_NOTDONE(iter)) {
-      const npy_intp x = *((npy_uint16*)PyArray_ITER_DATA(iter));
-      (*(npy_int64*)PyArray_GETPTR1(py_H, x))++;
-      PyArray_ITER_NEXT(iter);
-    }
-  } else {
-    while (PyArray_ITER_NOTDONE(iter)) {
-      const npy_intp x = *((npy_uint8*)PyArray_ITER_DATA(iter));
-      (*(npy_int64*)PyArray_GETPTR1(py_H, x))++;
-      PyArray_ITER_NEXT(iter);
-    }
-  }
-  return PyArray_Return(py_H);
 }
 
 //
@@ -873,6 +889,38 @@ static PyObject *roi_filter(PyObject *self, PyObject *args) {
   }
   
   return PyArray_Return(py_L2);  
+}
+
+
+static PyObject *paste_cr(PyObject *self, PyObject *args) {
+  PyArrayObject *py_I, *py_M, *py_O;
+  //
+  // Parse arguments: input image, input CR mask, output image (overwritten)
+  //
+  if(!PyArg_ParseTuple(args, "O!O!O!",
+                       &PyArray_Type,
+                       &py_I,
+		       &k
+		       )) {
+    return NULL;
+  }
+  PyArray_Descr* desc = PyArray_DESCR(py_I);
+  if (desc->type_num != NPY_UINT16) {
+    PyErr_Warn(PyExc_Warning,"Input image must be unsigned 16 bit integers (np.uint16).");
+    return NULL;
+  }
+  desc = PyArray_DESCR(py_O);
+  if (desc->type_num != NPY_UINT16) {
+    PyErr_Warn(PyExc_Warning,"Data must be unsigned 16 bit integers (np.uint16).");
+    return NULL;
+  }
+  desc = PyArray_DESCR(py_M);
+  if ((desc->type_num != NPY_UINT8) && (desc->type_num != NPY_BOOL)) {
+    PyErr_Warn(PyExc_Warning,"Mask must be numpy.uint8 or numpy.bool.");
+    return NULL;
+  }
+  
+  return PyArray_Return(py_O;
 }
 
 //--------------------------------------------------------
