@@ -80,12 +80,12 @@ with open(DATADIR+lista) as filelist:
                 Fd = np.cumsum(dark_roi_hist).astype(np.double)
                 Fd = Fd*(1.0/Fd[-1])
                 
-                #plt.figure(d*2)
-                #plt.loglog(sky_roi_hist[90:])
-                #plt.loglog(dark_roi_hist[90:])
-                #plt.grid(True)
-                #plt.legend(('sky','dark'))
-                #plt.show()
+                plt.figure(d*2)
+                plt.loglog(Fs)
+                plt.loglog(Fd)
+                plt.grid(True)
+                plt.legend(('sky','dark'))
+                plt.show()
                 #
                 # processing: must match distributions (PENDING)
                 #                

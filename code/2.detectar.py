@@ -46,11 +46,10 @@ with open(DATADIR+lista) as filelist:
         chist = np.cumsum(hist)
         N = img.shape[0]*img.shape[1]
         base = np.flatnonzero(chist > (N/10))[0]
-        img = np.maximum(img - base,1)
         #
         # the base of the logarithm is 2^(1/16)
         #
-        limg = np.round(16.0*np.log2(img.astype(np.double))).astype(np.uint8)
+        limg = np.round(16.0*np.log2(np.maximum(img-base,1).astype(np.double))).astype(np.uint8)
         #
         # compute the discrete histogram of the log-transformed image
         #
