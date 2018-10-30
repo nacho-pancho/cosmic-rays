@@ -1,8 +1,0 @@
-artif/linda3.1-nacho-ib910jyyq_raw.2.fits
-artif/linda3.1-nacho-ib910jyyq_raw.1.fits
-artif/linda3.1-nacho-ib910kxpq_raw.2.fits
-artif/linda3.1-nacho-ib910kxpq_raw.1.fits
-artif/linda3.1-nacho-ib910irxq_raw.2.fits
-artif/linda3.1-nacho-ib910irxq_raw.1.fits
-artif/linda3.1-nacho-ib910kxlq_raw.1.fits
-artif/linda3.1-nacho-ib910kxlq_raw.2.fits
