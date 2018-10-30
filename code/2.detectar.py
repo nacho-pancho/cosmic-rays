@@ -62,15 +62,15 @@ with open(DATADIR+lista) as filelist:
         plt.figure(1,figsize=(10,15))
         plt.semilogy(hist,'*-')
         plt.semilogy(chist,'*-')
-        plt.savefig(fprefix + '-hist.png')
+        plt.savefig(fprefix + '-1.hist.png')
         #
         #
         #
         med = np.flatnonzero(chist > 0.5)[0]
-        thres = np.flatnonzero(chist > 0.975)[0]
+        thres = 64 # empirically observed 
         print 'median=',med,
         print 'thres=',thres
-        io.imsave(fprefix +'-log.png',CMAP(limg))
+        io.imsave(fprefix +'-2.log.png',limg)
         #
         # first  binary classification mask, crude
         # the marked regions are referred to as ROI (Region Of Interest)
@@ -80,13 +80,14 @@ with open(DATADIR+lista) as filelist:
         #
         mask = crimg.binary_closure(mask) 
         mask = crimg.binary_closure(mask) 
-        pnmgz.imwrite(fprefix + "-mask1.pbm.gz",mask,1)
+        pnmgz.imwrite(fprefix + "-3.mask1.pbm.gz",mask,1)
+        io.imsave(fprefix + '-3.mask1.tiff',mask.astype(np.uint8)*255)
         #
         # compute Laplacian on ROIs
         #
         mask_lap = crimg.mask_laplacian(limg, mask);
         mask_lap_img = mask_lap.astype(np.double)*(1.0/np.max(mask_lap))
-        io.imsave(fprefix +'.mask-laplacian.png',CMAP(mask_lap_img))
+        io.imsave(fprefix +'-4.roi_lap.png',mask_lap_img)
         #
         # assign a unique label to each ROI
         #
@@ -94,8 +95,6 @@ with open(DATADIR+lista) as filelist:
         #
         # save it (for debugging purposes)
         #
-        roi_img = roi_label.astype(np.double)*(1.0/np.max(roi_label))
-        io.imsave(fprefix + '-label1.png',CMAP(roi_img))
         #
         # Compute various statistics for each ROI.
         # For each ROI, the statistics are:
@@ -104,8 +103,18 @@ with open(DATADIR+lista) as filelist:
         #
         # row 0 contains the aforementioned values for the union of all ROI's
         #
+        hist = crimg.discrete_histogram(img[mask > 0])
+        np.savez(fprefix + '-5.roi-hist1.npz',hist)        
+        chist = np.cumsum(hist)
+        hist = hist.astype(np.double)*(1.0/chist[-1])
+        chist = chist.astype(np.double)*(1.0/chist[-1])
+        plt.figure(2,figsize=(10,15))
+        plt.loglog(hist,'*-')
+        plt.loglog(np.cumsum(hist),'*-')
+        plt.savefig(fprefix + '-5.roi-hist1.png')
+
         roi_stats = crimg.roi_stats(roi_label,mask_lap)
-        np.savez(fprefix + '-roi-stats1.npz',roi_stats)
+        np.savez(fprefix + '-6.roi-stats1.npz',roi_stats)
         #print roi_stats[0,:]
         #
         # filter out roi's based on stats
@@ -138,17 +147,17 @@ with open(DATADIR+lista) as filelist:
         roi_label     = crimg.roi_filter(roi_label,roi_mask)
         # refine binary mask
         mask = roi_label > 0
-        pnmgz.imwrite(fprefix + '-mask2.pbm.gz',mask,1)
+        pnmgz.imwrite(fprefix + '-7.mask2.pbm.gz',mask,1)
+        io.imsave(fprefix + '-3.mask2.tiff',mask.astype(np.uint8)*255)
         #
         # save filtered labeled ROI pseudo-image
         #
-        roi_img = roi_label.astype(np.double)*(1.0/np.max(roi_label))
-        io.imsave(fprefix + '-label2.png',CMAP(roi_img))
+        #roi_img = roi_label.astype(np.double)*(1.0/np.max(roi_label))
         #
         # compute and save stats of filtered ROIs in logarithmic scale
         #
         roi_stats = crimg.roi_stats(roi_label,mask_lap)
-        np.savez(fprefix + '-roi-stats2.npz',roi_stats)        
+        np.savez(fprefix + '-8.roi-stats2.npz',roi_stats)        
         k = k + 1
         #
         # finally, compute and save histograms of filtered ROIs and
@@ -158,8 +167,16 @@ with open(DATADIR+lista) as filelist:
         # in and properly superimposing CRs on clean images
         #
         hist = crimg.discrete_histogram(img[mask > 0])
-        np.savez(fprefix + '-roi-hist2.npz',hist)        
+        np.savez(fprefix + '-9.roi-hist2.npz',hist)        
+        chist = np.cumsum(hist)
+        hist = hist.astype(np.double)*(1.0/chist[-1])
+        chist = chist.astype(np.double)*(1.0/chist[-1])
+        plt.figure(3,figsize=(10,15))
+        plt.loglog(hist,'*-')
+        plt.loglog(np.cumsum(hist),'*-')
+        plt.savefig(fprefix + '-9-roi-hist2.png')
+
         hist = crimg.discrete_histogram(img[mask == 0])
-        np.savez(fprefix + '-non-roi-hist2.npz',chist)        
+        np.savez(fprefix + '-9.non-roi-hist2.npz',chist)        
         
 #plt.show()
