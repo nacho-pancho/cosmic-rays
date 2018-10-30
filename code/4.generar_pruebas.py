@@ -61,20 +61,25 @@ with open(DATADIR+lista) as filelist:
                 #
                 # read filled in image
                 #
-                sky = fitsio.read(DATADIR + fbase + "-filled.fits").astype(np.double)
+                sky = fitsio.read(DATADIR + fbase + "-filled.fits")
                 #
                 # read the empirical distribution of its (erased) CRs
                 #
                 sky_roi_hist = np.load(RESDIR + fbase + '-9.roi-hist2.npz')['arr_0']
+                Fs = np.cumsum(sky_roi_hist).astype(np.double)
+                Fs = Fs*(1.0/Fs[-1])
                 #
                 # read dark frame from which we will superimpose our "ground truth CRs"
                 #
-                dark = fitsio.read(DATADIR + fdark).astype(np.double)
+                dark = fitsio.read(DATADIR + fdark)
                 darkbase = fdark[:-6]
                 darkbase2 = fdark[(darkbase.rfind('/')+1):-6]
                 print "sky=",fbase2, "dark=",darkbase2
                 dark_mask = pnmgz.imread(RESDIR + darkbase + '-7.mask2.pbm.gz').astype(np.bool)
                 dark_roi_hist = np.load(RESDIR + darkbase + '-9.roi-hist2.npz')['arr_0']
+                Fd = np.cumsum(dark_roi_hist).astype(np.double)
+                Fd = Fd*(1.0/Fd[-1])
+                
                 #plt.figure(d*2)
                 #plt.loglog(sky_roi_hist[90:])
                 #plt.loglog(dark_roi_hist[90:])
@@ -83,9 +88,18 @@ with open(DATADIR+lista) as filelist:
                 #plt.show()
                 #
                 # processing: must match distributions (PENDING)
-                #
+                #                
                 sky2 = np.copy(sky)
+                
+                M,N = dark.shape
+                for i in range(M):
+                    for j in range(N):
+                        if dark_mask[i,j]:
+                            d = dark[i,j]
+                            q = Fd[d] # q = F[d]
+                            sky2[i,j] = np.flatnonzero(Fs >= q)[0] # s = F^-1[Fd[q]]
                 #fitsio.write(OUTDIR+fbase2+"+"+darkbase2+"-artif.fits",sky2)
+                
                 sky2 = np.log(sky2-np.min(sky2)+1)
                 sky2 = (255.0/np.max(sky2))*sky2
                 tif.imsave(OUTDIR + fbase2+"+"+darkbase2+"-artif-log.tiff",sky2.astype(np.uint8))
