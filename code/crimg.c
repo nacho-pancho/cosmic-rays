@@ -950,21 +950,18 @@ static PyObject *paste_cr(PyObject *self, PyObject *args) {
   //
   // cumsum
   //
-  double Fi = 0, Fo = 0;
+  double Fd = 0.0, Fs = 0.0;
   for (npy_intp i = 0; i < MAXVAL; i++) {
-    Fi += Fdark[i];
-    Fdark[i] = Fi;
-    Fo += Fsky[i];
-    Fsky[i] = Fo;
+    Fd += Fdark[i]; Fdark[i] = Fd;
+    Fs += Fsky[i];  Fsky[i] = Fs;
   }
   //
   // normalization
   //
-  const double Ki = 1.0/Fi, Ko = 1.0/Fo;
+  const double Kd = 1.0/Fd, Ks = 1.0/Fs;
   //printf("normalization Fi=%f, Fo=%f, Ki=%f Ko=%f.\n",Fi, Fo, Ki,Ko);
   for (npy_intp i = 0; i < MAXVAL; i++) {
-    Fdark[i] *= Ki;
-    Fsky[i] *= Ko;
+    Fdark[i] *= Kd;   Fsky[i] *= Ks;
     //printf("Fdark[%lu]=%f\t",i,Fdark[i]);
     //printf("Fsky[%lu]=%f\n",i,Fsky[i]);
   }
