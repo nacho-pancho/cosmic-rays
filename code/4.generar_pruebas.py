@@ -42,9 +42,9 @@ plt.close('all')
 if len(sys.argv) > 1:
     lista = sys.argv[1]
 else:
-    lista = "cielo_sel.txt"
+    lista = "sky_sep.list"
 
-darklistfile = "dark_sel.txt"
+darklistfile = "dark_sep.list"
 
 plt.close('all')
 CMAP = plt.get_cmap('hot')
@@ -58,6 +58,13 @@ with open(DATADIR+lista) as filelist:
         with open(DATADIR + darklistfile) as darklist:
             plt.close('all')
             for fdark in darklist:
+                darkbase = fdark[:-6]
+                darkbase2 = fdark[(darkbase.rfind('/')+1):-6]
+                print "sky=",fbase2, "dark=",darkbase2
+                outfile = OUTDIR+fbase2+"+"+darkbase2+"-artif.fits"
+                if os.path.exists(outfile):
+                    print "ya calculado."
+                    continue
                 #
                 # read filled in image
                 #
@@ -72,9 +79,6 @@ with open(DATADIR+lista) as filelist:
                 # read dark frame from which we will superimpose our "ground truth CRs"
                 #
                 dark = fitsio.read(DATADIR + fdark)
-                darkbase = fdark[:-6]
-                darkbase2 = fdark[(darkbase.rfind('/')+1):-6]
-                print "sky=",fbase2, "dark=",darkbase2
                 dark_mask = pnmgz.imread(RESDIR + darkbase + '-7.mask2.pbm.gz').astype(np.bool)
                 dark_roi_hist = np.load(RESDIR + darkbase + '-9.roi-hist2.npz')['arr_0']
                 Fd = np.cumsum(dark_roi_hist).astype(np.double)
@@ -85,7 +89,7 @@ with open(DATADIR+lista) as filelist:
                 plt.loglog(Fd)
                 plt.grid(True)
                 plt.legend(('sky','dark'))
-                plt.show()
+                plt.savefig(OUTDIR + fbase2+"+"+darkbase2+"-hist.svg")
                 #
                 # processing: must match distributions (PENDING)
                 #                
@@ -98,7 +102,7 @@ with open(DATADIR+lista) as filelist:
                             d = dark[i,j]
                             q = Fd[d] # q = F[d]
                             sky2[i,j] = np.flatnonzero(Fs >= q)[0] # s = F^-1[Fd[q]]
-                #fitsio.write(OUTDIR+fbase2+"+"+darkbase2+"-artif.fits",sky2)
+                fitsio.write(outfile,sky2)
                 
                 sky2 = np.log(sky2-np.min(sky2)+1)
                 sky2 = (255.0/np.max(sky2))*sky2
