@@ -346,12 +346,11 @@ static PyObject *discrete_histogram(PyObject *self, PyObject *args) {
   }
   const char typecode = desc->type_num;
   // histograms for 8 or 16 bit integers; larger integers are squashed down
-  npy_intp dim;
   switch (typecode) {
   case NPY_UINT8: case NPY_BOOL:
-    return _discrete_histogram_8(py_I);
+    return PyArray_Return(_discrete_histogram_8(py_I));
   case NPY_UINT16:
-    return _discrete_histogram_16(py_I);
+    return PyArray_Return(_discrete_histogram_16(py_I));
   default:
       PyErr_Warn(PyExc_Warning,"Only 8 or 16 bit integers allowed.");
       return NULL;
@@ -900,7 +899,8 @@ static PyObject *paste_cr(PyObject *self, PyObject *args) {
   if(!PyArg_ParseTuple(args, "O!O!O!",
                        &PyArray_Type,
                        &py_I,
-		       &k
+                       &py_M,
+                       &py_O
 		       )) {
     return NULL;
   }
@@ -920,7 +920,7 @@ static PyObject *paste_cr(PyObject *self, PyObject *args) {
     return NULL;
   }
   
-  return PyArray_Return(py_O;
+  return PyArray_Return(py_O);
 }
 
 //--------------------------------------------------------
