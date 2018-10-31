@@ -6,6 +6,14 @@ import tifffile as tif
 import os
 import pnmgz
 import sys
+
+#
+# recompile crimg module
+# 
+os.system('python setup.py build')
+#
+# import compiled module
+#
 import crimg
 
 CMAP = plt.get_cmap('nipy_spectral')
