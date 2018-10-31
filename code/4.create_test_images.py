@@ -104,7 +104,12 @@ with open(DATADIR+lista) as filelist:
                          if dark_mask[i,j]:
                              d = dark[i,j]
                              q = Fd[d] # q = F[d]                            
-                             sky2[i,j] = np.flatnonzero(Fs >= q)[0] # s = F^-1[Fd[q]]
+                             aux = np.flatnonzero(Fs >= q)
+                             if len(aux):
+                                 if aux[0] > sky2[i,j]:
+                                    sky2[i,j] = aux[0] # s = F^-1[Fd[q]]
+                             else:
+                                 sky[i,j] = len(Fs)-1
                 fitsio.write(outfile,sky2)
                
                 sky2 = np.log(sky2-np.min(sky2)+1)
