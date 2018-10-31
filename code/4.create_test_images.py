@@ -87,8 +87,6 @@ with open(DATADIR+lista) as filelist:
                 dark_roi_hist = np.load(RESDIR + darkbase + '-9.roi-hist2.npz')['arr_0']
                 Fd = np.cumsum(dark_roi_hist).astype(np.double)
                 Fd = Fd*(1.0/Fd[-1])
-                #if len(Fs) < len(Fd):
-                #    Fs = np.concatenate(Fs,np.ones(len(Fd)-len(Fs)))
                 plt.figure(d*2)
                 plt.loglog(Fs)
                 plt.loglog(Fd)
@@ -125,4 +123,3 @@ with open(DATADIR+lista) as filelist:
                 tif.imsave(OUTDIR + fbase2+"+"+darkbase2+"-artif-log.tiff",sky_test.astype(np.uint8))
                 print "pronto."
         k = k + 1
-plt.show()
