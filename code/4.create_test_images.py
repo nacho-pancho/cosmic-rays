@@ -68,6 +68,7 @@ with open(DATADIR+lista) as filelist:
                 if os.path.exists(outfile):
                     print "ya calculado."
                     continue
+                print "cargando imagen"
                 #
                 # read filled in image
                 #
@@ -75,6 +76,7 @@ with open(DATADIR+lista) as filelist:
                 #
                 # read the empirical distribution of its (erased) CRs
                 #
+                print "cargando histogramas"
                 sky_roi_hist = np.load(RESDIR + fbase + '-9.roi-hist2.npz')['arr_0']
                 Fs = np.cumsum(sky_roi_hist).astype(np.double)
                 Fs = Fs*(1.0/Fs[-1])
@@ -96,8 +98,11 @@ with open(DATADIR+lista) as filelist:
                 #
                 # processing: must match distributions (PENDING)
                 #                
+                print "cargando mascara"
                 dark_mask = pnmgz.imread(RESDIR + darkbase + '-7.mask2.pbm.gz').astype(np.bool)
                 sky_test = np.copy(sky_filled)
+
+                print "creando imagen sintetica"
                 crimg.paste_cr(dark,dark_mask,Fd,Fs,sky_test)
                 
                 # M,N = dark.shape
@@ -112,15 +117,12 @@ with open(DATADIR+lista) as filelist:
                 #                     sky_test[i,j] = aux[0] # s = F^-1[Fd[q]]
                 #              else:
                 #                  sky[i,j] = len(Fs)-1
+                print "guardando resultado."
                 fitsio.write(outfile,sky_test)
                
                 sky_test = np.log(sky_test-np.min(sky_test)+1)
                 sky_test = (255.0/np.max(sky_test))*sky_test
                 tif.imsave(OUTDIR + fbase2+"+"+darkbase2+"-artif-log.tiff",sky_test.astype(np.uint8))
-                if d == -1:
-                    plt.figure()
-                    plt.imshow(np.log(sky_test-np.min(sky_test)+1),cmap=CMAP)
-                d = d + 1
                 print "pronto."
         k = k + 1
 plt.show()

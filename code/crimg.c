@@ -22,6 +22,7 @@ static PyObject *mask_refine          (PyObject *self, PyObject *args);
 static PyObject *roi_label            (PyObject *self, PyObject *args); 
 static PyObject *roi_stats            (PyObject *self, PyObject *args); 
 static PyObject *roi_filter           (PyObject *self, PyObject *args); 
+static PyObject *inpaint              (PyObject *self, PyObject *args); 
 static PyObject *paste_cr             (PyObject *self, PyObject *args);
 
 
@@ -44,6 +45,7 @@ static PyMethodDef methods[] = {
   { "roi_stats", roi_stats, METH_VARARGS, "Statistics of the different ROIs as defined by the labeling image"},
   { "roi_filter", roi_filter, METH_VARARGS, "Filter out ROIs"},
   { "paste_cr", paste_cr, METH_VARARGS, "Paste CRs from one image to another"},
+  { "inpaint", inpaint, METH_VARARGS, "Fill ROIs with backgound distribution."},
   { NULL, NULL, 0, NULL } /* Sentinel */
 };
 //
@@ -990,7 +992,7 @@ static PyObject *paste_cr(PyObject *self, PyObject *args) {
   //
   // first pass: compute histogram of ROIs of both images
   //
-  const npy_intp MAXVAL = 1UL << 16;
+  const npy_int64 MAXVAL = (1 << 16);
 
   const npy_intp M = PyArray_DIM(py_dark,0);
   const npy_intp N = PyArray_DIM(py_dark,1);
@@ -1014,17 +1016,98 @@ static PyObject *paste_cr(PyObject *self, PyObject *args) {
       if (pmask[j]) {
 	const npy_uint16 d = pdark[j];
 	const double q = Fdark[d];
-	npy_uint16 x;
+	npy_int64 x;
 	//printf("%lu %lu:  %u + %u ->",i,j,psky[j],d);
-	for (x = 0; x < MAXVAL; x++)
-	  if (Fsky[x] >= q) break;
+	for (x = 0; x < MAXVAL; x++) {
+	  if (Fsky[x] >= q) {
+	    break;
+	  }
+	}
 	psky[j] = x;
-	//printf(" %u\n",psky[j]);
       }
     }
   }
   Py_INCREF(py_sky);
   return PyArray_Return(py_sky);
+}
+
+
+//--------------------------------------------------------
+
+static PyObject *inpaint(PyObject *self, PyObject *args) {
+  PyArrayObject *py_input, *py_mask, *py_bg_hist, *py_output;
+  //
+  // Parse arguments: input image, mask, BG histogram, output image (overwritten)
+  //
+  if(!PyArg_ParseTuple(args, "O!O!O!O!",
+                       &PyArray_Type,
+                       &py_input,
+                       &PyArray_Type,
+                       &py_mask,
+                       &PyArray_Type,
+                       &py_bg_hist,
+                       &PyArray_Type,
+                       &py_output
+		       )) {
+    return NULL;
+  }
+  PyArray_Descr* desc = PyArray_DESCR(py_input);
+  if (desc->type_num != NPY_UINT16) {
+    PyErr_Warn(PyExc_Warning,"Input image (arg 1)  must be unsigned 16 bit integers (np.uint16).");
+    return NULL;
+  }
+  desc = PyArray_DESCR(py_input);
+  if (desc->type_num != NPY_UINT16) {
+    PyErr_Warn(PyExc_Warning,"Output image (arg 5)  must be unsigned 16 bit integers (np.uint16).");
+    return NULL;
+  }
+  desc = PyArray_DESCR(py_bg_hist);
+  if (desc->type_num != NPY_DOUBLE) {
+    PyErr_Warn(PyExc_Warning,"Sky CR histogram (arg 4) must be double (np.double).");
+    return NULL;
+  }
+  desc = PyArray_DESCR(py_mask);
+  if ((desc->type_num != NPY_UINT8) && (desc->type_num != NPY_BOOL)) {
+    PyErr_Warn(PyExc_Warning,"ROI mask (arg 2) must be numpy.uint8 or numpy.bool.");
+    return NULL;
+  }
+  //
+  // first pass: compute histogram of ROIs of both images
+  //
+  const npy_int64 MAXVAL = (1 << 16);
+
+  const npy_intp M = PyArray_DIM(py_input,0);
+  const npy_intp N = PyArray_DIM(py_input,1);
+
+  const npy_intp sinput = PyArray_STRIDE(py_input,0)/2;
+  const npy_intp smask = PyArray_STRIDE(py_mask,0)  ;
+  const npy_intp soutput = PyArray_STRIDE(py_output,0)/2;
+
+  const npy_uint16* pinput = PyArray_DATA(py_input);
+  const npy_uint8*  pmask = PyArray_DATA(py_mask);
+  npy_uint16* poutput = PyArray_DATA(py_output);
+
+  const npy_double* Fbg = PyArray_DATA(py_bg_hist);
+  
+  pinput = PyArray_DATA(py_input);
+  pmask = PyArray_DATA(py_mask);
+  poutput = PyArray_DATA(py_output);
+  for (npy_intp i = 0; i < M; i++, pinput += sinput, pmask += smask, poutput += soutput) {
+    for (npy_intp j = 0; j < N; j++) {
+      if (pmask[j]) {
+	const double theta = 0.99*((double)rand())/((double)RAND_MAX); // PENDING: random
+	npy_int64 x;
+	for (x = 0; x < MAXVAL; x++) {
+	  if (Fbg[x] >= theta) {
+	    break;
+	  }
+	}
+	poutput[j] = x;
+      }
+    }
+  }
+  Py_INCREF(py_output);
+  return PyArray_Return(py_output);
 }
 
 //--------------------------------------------------------

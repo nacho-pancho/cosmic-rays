@@ -47,6 +47,15 @@ with open(DATADIR+lista) as filelist:
         #
         img = fitsio.read(DATADIR+fname).astype(np.uint16)
         #
+        # see if there is any non-uniform intensity
+        #
+        #a = np.median(img[ 100:, 100:])
+        #b = np.median(img[ 100:,-100:])
+        #c = np.median(img[-100:, 100:])
+        #d = np.median(img[-100:,-100:])
+        #print a,b,c,d
+        #continue
+        #
         # transform so that its percentile 10 is mapped to 0
         # and its maximum to approximately 255, in logarithmic scale
         #

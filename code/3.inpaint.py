@@ -15,6 +15,7 @@ from skimage import morphology as morph
 import tifffile as tif
 import sys
 import pnmgz
+import crimg
 
 DATADIR = '../data/'
 RESDIR = '../results/'
@@ -31,32 +32,22 @@ else:
     lista = "sky_sep.list"
 
 with open(DATADIR+lista) as filelist:
+    k = 0
     for fname  in filelist:
         img = fitsio.read(DATADIR+fname)
         img_filled = np.copy(img)
         fbase = fname[:-len(EXT)-1]
         fbase2 = fbase[fbase.rfind('/')+1:]
         mask = pnmgz.imread(RESDIR + fbase + '-7.mask2.pbm.gz')
-#       mask = morph.binary_dilation(mask,NHOOD) # para operaciones morfologicas
-        #flap = RESDIR + fbase + '-mask.pbm.gz'
-        #pnmgz.imwrite(flap,mask,1)
-        #flap = RESDIR + fbase + '-mask3.tiff'
-        #tif.imsave(flap, mask.astype(np.uint8)*255)
-        img_bg = img[mask==False].ravel()
-        img_bg_s = np.sort(img_bg)
-        n = len(img_bg_s)
-        print fbase
-        for i in range(2048):
-            for j in range(2048):
-                if mask[i,j] == False:
-                    continue
-                a = np.random.random_sample()
-                idx = np.int(a*n/2)
-                v = img_bg_s[idx]
-                img_filled[i,j] = v
+        print k,fbase2
+        img_bg = img[mask==False]
+        Fbg = crimg.discrete_histogram(img_bg)
+        Fbg = np.cumsum(Fbg)
+        Fbg = Fbg.astype(np.double)*(1.0/Fbg[-1])
+        crimg.inpaint(img,mask,Fbg,img_filled)
         fitsio.write(DATADIR + fbase + '-filled.fits', img_filled)
         preview = np.log(img_filled-np.min(img_filled)+1)
         preview = preview*(255.0/np.max(preview.ravel()))
         flap = RESDIR + fbase + '-filled.tiff'
         tif.imsave(flap,preview.astype(np.uint8))
-        plt.show()
+        k = k + 1
