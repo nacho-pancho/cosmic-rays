@@ -20,7 +20,8 @@ os.system('wget -c http://iie.fing.edu.uy/~nacho/data/cosmic_rays.7z')
 #
 # I have them 7zipped (much better than zip)
 #
-os.system('7zr x cosmic_rays.7z')
+os.system('mkdir -p ../data')
+os.system('7zr -o../data/ x cosmic_rays.7z')
 #
 # create output dir
 #

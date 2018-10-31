@@ -13,7 +13,8 @@
 #define REFLECT(x,a,b) ( (x) > (a) ? ( (x) < (b) ? (x) : ((b)-(x)) ) : ((a)-(x)) )
 
 /// Python adaptors
-static PyObject *binary_closure       (PyObject* self, PyObject* args);
+static PyObject *binary_closure_4     (PyObject* self, PyObject* args);
+static PyObject *binary_closure_8     (PyObject *self, PyObject *args);
 static PyObject *discrete_histogram   (PyObject* self, PyObject* args);
 static PyObject *discrete_log2rootk   (PyObject *self, PyObject *args);
 static PyObject *mask_laplacian       (PyObject *self, PyObject *args); 
@@ -21,7 +22,7 @@ static PyObject *mask_refine          (PyObject *self, PyObject *args);
 static PyObject *roi_label            (PyObject *self, PyObject *args); 
 static PyObject *roi_stats            (PyObject *self, PyObject *args); 
 static PyObject *roi_filter           (PyObject *self, PyObject *args); 
-static PyObject *paste_cr             (PyObject *self, PyObject *args); 
+static PyObject *paste_cr             (PyObject *self, PyObject *args);
 
 
 /*****************************************************************************
@@ -33,7 +34,8 @@ static PyObject *paste_cr             (PyObject *self, PyObject *args);
 //--------------------------------------------------------
 //
 static PyMethodDef methods[] = {
-  { "binary_closure", binary_closure, METH_VARARGS, "Morphological closure for binary images."},
+  { "binary_closure_4", binary_closure_4, METH_VARARGS, "Morphological closure of 4 for binary images."},
+  { "binary_closure_8", binary_closure_8, METH_VARARGS, "Morphological closure of 8 for binary images."},
   { "discrete_histogram", discrete_histogram, METH_VARARGS, "Fast histogram for images."},
   { "discrete_log2rootk", discrete_log2rootk, METH_VARARGS, "Fast k-th root-of-2 logarithm for discrete signalsi (k integer)."},
   { "mask_laplacian", mask_laplacian, METH_VARARGS, "Compute Laplacian within each ROI ."},
@@ -60,7 +62,7 @@ PyMODINIT_FUNC initcrimg(void) {
 // binary 4 or 8 neighbor closure
 //--------------------------------------------------------
 //
-static PyObject *binary_closure(PyObject *self, PyObject *args) {
+static PyObject *binary_closure_4(PyObject *self, PyObject *args) {
   PyArrayObject *py_M, *py_C;
   // Parse arguments: image, neighborhood: 4 or 8
   if(!PyArg_ParseTuple(args, "O!", &PyArray_Type, &py_M)) {
@@ -155,6 +157,55 @@ static PyObject *binary_closure(PyObject *self, PyObject *args) {
   //
   return PyArray_Return(py_C);
 }
+
+static PyObject *binary_closure_8(PyObject *self, PyObject *args) {
+  PyArrayObject *py_M, *py_C;
+  if(!PyArg_ParseTuple(args, "O!", &PyArray_Type, &py_M)) {
+    return NULL;
+  }
+  const PyArray_Descr* desc = PyArray_DESCR(py_M);
+  const char typecode = desc->type_num;
+  if ((typecode != NPY_BOOL) && ((typecode != NPY_UINT8))) {
+    PyErr_Warn(PyExc_Warning,"Data type must be numpy.uint8 or numpy.bool.");
+    return NULL;
+  }
+  const npy_intp M = PyArray_DIM(py_M,0);
+  const npy_intp N = PyArray_DIM(py_M,1);
+  
+  // data type ok, proceed
+  // create returned mask
+  py_C = (PyArrayObject*) PyArray_SimpleNew(2,PyArray_DIMS(py_M),typecode);
+  const npy_uint8* rM = PyArray_DATA(py_M);
+  const npy_intp   sM = PyArray_STRIDE(py_M,0);
+  npy_uint8* rC = PyArray_DATA(py_C);
+  const npy_intp   sC = PyArray_STRIDE(py_C,0);
+
+  for (npy_intp i = 0; i < M; ++i, rC+=sC, rM+=sM) {
+    const npy_uint8* rs = (i < (M-1)) ? rM+sM: rM-sM;
+    const npy_uint8* rn = (i > 0) ? rM-sM: rM+sM;
+    for (npy_intp j = 0; j < N; ++j) {
+      if (rM[j]) {
+	rC[j] = 1;
+	continue;
+      }
+      const npy_intp je = (j < (N-1)) ? j+1: N-2;
+      const npy_intp jw = (j > 0) ? j-1: 1;
+      const npy_uint8 n = rn[j];
+      const npy_uint8 s = rs[j];
+      const npy_uint8 e = rM[je];
+      const npy_uint8 w = rM[jw];
+      const npy_uint8 ne = rn[je];
+      const npy_uint8 nw = rn[jw];
+      const npy_uint8 se = rs[je];
+      const npy_uint8 sw = rs[jw];
+      const npy_uint16 a =  n + s + e + w ;
+      const npy_uint16 b = ne + nw + se + sw;
+      rC[j] = (a >= 3) || (b >= 3) || (a+b >= 4);
+    }
+  }
+  return PyArray_Return(py_C);
+}
+
 //
 //--------------------------------------------------------
 // discrete_log2rootk
@@ -890,17 +941,22 @@ static PyObject *roi_filter(PyObject *self, PyObject *args) {
   return PyArray_Return(py_L2);  
 }
 
+//--------------------------------------------------------
 
 static PyObject *paste_cr(PyObject *self, PyObject *args) {
-  PyArrayObject *py_dark, *py_mask, *py_sky;
+  PyArrayObject *py_dark, *py_mask, *py_dark_hist, *py_sky_hist, *py_sky;
   //
-  // Parse arguments: input image, input CR mask, output image (overwritten)
+  // Parse arguments: input image, input CR mask, input CR histogram, output CR histogram, output image (overwritten)
   //
-  if(!PyArg_ParseTuple(args, "O!O!O!",
+  if(!PyArg_ParseTuple(args, "O!O!O!O!O!",
                        &PyArray_Type,
                        &py_dark,
                        &PyArray_Type,
                        &py_mask,
+                       &PyArray_Type,
+                       &py_dark_hist,
+                       &PyArray_Type,
+                       &py_sky_hist,
                        &PyArray_Type,
                        &py_sky
 		       )) {
@@ -908,25 +964,33 @@ static PyObject *paste_cr(PyObject *self, PyObject *args) {
   }
   PyArray_Descr* desc = PyArray_DESCR(py_dark);
   if (desc->type_num != NPY_UINT16) {
-    PyErr_Warn(PyExc_Warning,"Input image must be unsigned 16 bit integers (np.uint16).");
+    PyErr_Warn(PyExc_Warning,"Input image (arg 1)  must be unsigned 16 bit integers (np.uint16).");
     return NULL;
   }
   desc = PyArray_DESCR(py_sky);
   if (desc->type_num != NPY_UINT16) {
-    PyErr_Warn(PyExc_Warning,"Data must be unsigned 16 bit integers (np.uint16).");
+    PyErr_Warn(PyExc_Warning,"Output image (arg 5)  must be unsigned 16 bit integers (np.uint16).");
+    return NULL;
+  }
+  desc = PyArray_DESCR(py_sky_hist);
+  if (desc->type_num != NPY_DOUBLE) {
+    PyErr_Warn(PyExc_Warning,"Sky CR histogram (arg 4) must be double (np.double).");
+    return NULL;
+  }
+  desc = PyArray_DESCR(py_dark_hist);
+  if (desc->type_num != NPY_DOUBLE) {
+    PyErr_Warn(PyExc_Warning,"Dark CR  histogram (arg 3) must be double (np.double).");
     return NULL;
   }
   desc = PyArray_DESCR(py_mask);
   if ((desc->type_num != NPY_UINT8) && (desc->type_num != NPY_BOOL)) {
-    PyErr_Warn(PyExc_Warning,"Mask must be numpy.uint8 or numpy.bool.");
+    PyErr_Warn(PyExc_Warning,"ROI mask (arg 2) must be numpy.uint8 or numpy.bool.");
     return NULL;
   }
   //
   // first pass: compute histogram of ROIs of both images
   //
   const npy_intp MAXVAL = 1UL << 16;
-  double* Fdark = (double*) calloc(MAXVAL, sizeof(double));
-  double* Fsky = (double*) calloc(MAXVAL, sizeof(double));
 
   const npy_intp M = PyArray_DIM(py_dark,0);
   const npy_intp N = PyArray_DIM(py_dark,1);
@@ -939,35 +1003,9 @@ static PyObject *paste_cr(PyObject *self, PyObject *args) {
   const npy_uint8*  pmask = PyArray_DATA(py_mask);
   npy_uint16* psky = PyArray_DATA(py_sky);
 
-  for (npy_intp i = 0; i < M; i++, pdark += sdark, pmask += smask, psky += ssky) {
-    for (npy_intp j = 0; j < N; j++) {
-      if (pmask[j]) {
-	Fdark[pdark[j]]++;
-	Fsky[psky[j]]++;
-      }
-    }
-  }
-  //
-  // cumsum
-  //
-  double Fd = 0.0, Fs = 0.0;
-  for (npy_intp i = 0; i < MAXVAL; i++) {
-    Fd += Fdark[i]; Fdark[i] = Fd;
-    Fs += Fsky[i];  Fsky[i] = Fs;
-  }
-  //
-  // normalization
-  //
-  const double Kd = 1.0/Fd, Ks = 1.0/Fs;
-  //printf("normalization Fi=%f, Fo=%f, Ki=%f Ko=%f.\n",Fi, Fo, Ki,Ko);
-  for (npy_intp i = 0; i < MAXVAL; i++) {
-    Fdark[i] *= Kd;   Fsky[i] *= Ks;
-    //printf("Fdark[%lu]=%f\t",i,Fdark[i]);
-    //printf("Fsky[%lu]=%f\n",i,Fsky[i]);
-  }
-  //
-  // now we have both empirical cumulative distribution functions; we can paste
-  // 
+  const npy_double* Fdark = PyArray_DATA(py_dark_hist);
+  const npy_double* Fsky  = PyArray_DATA(py_sky_hist);
+  
   pdark = PyArray_DATA(py_dark);
   pmask = PyArray_DATA(py_mask);
   psky = PyArray_DATA(py_sky);
@@ -985,8 +1023,6 @@ static PyObject *paste_cr(PyObject *self, PyObject *args) {
       }
     }
   }
-  free(Fsky);
-  free(Fdark);
   Py_INCREF(py_sky);
   return PyArray_Return(py_sky);
 }

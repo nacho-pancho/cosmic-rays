@@ -49,6 +49,8 @@ darklistfile = "dark_sep.list"
 
 plt.close('all')
 CMAP = plt.get_cmap('hot')
+DEBUG = True
+
 with open(DATADIR+lista) as filelist:
     for fname  in filelist:
         img = fitsio.read(DATADIR + fname).astype(np.double)
@@ -69,7 +71,7 @@ with open(DATADIR+lista) as filelist:
                 #
                 # read filled in image
                 #
-                sky = fitsio.read(DATADIR + fbase + "-filled.fits")
+                sky_filled = fitsio.read(DATADIR + fbase + "-filled.fits")
                 #
                 # read the empirical distribution of its (erased) CRs
                 #
@@ -80,7 +82,6 @@ with open(DATADIR+lista) as filelist:
                 # read dark frame from which we will superimpose our "ground truth CRs"
                 #
                 dark = fitsio.read(DATADIR + fdark)
-                dark_mask = pnmgz.imread(RESDIR + darkbase + '-7.mask2.pbm.gz').astype(np.bool)
                 dark_roi_hist = np.load(RESDIR + darkbase + '-9.roi-hist2.npz')['arr_0']
                 Fd = np.cumsum(dark_roi_hist).astype(np.double)
                 Fd = Fd*(1.0/Fd[-1])
@@ -95,29 +96,30 @@ with open(DATADIR+lista) as filelist:
                 #
                 # processing: must match distributions (PENDING)
                 #                
-                sky2 = np.copy(sky)
-                #crimg.paste_cr(dark,dark_mask,sky2)
+                dark_mask = pnmgz.imread(RESDIR + darkbase + '-7.mask2.pbm.gz').astype(np.bool)
+                sky_test = np.copy(sky_filled)
+                crimg.paste_cr(dark,dark_mask,Fd,Fs,sky_test)
                 
-                M,N = dark.shape
-                for i in range(M):
-                     for j in range(N):
-                         if dark_mask[i,j]:
-                             d = dark[i,j]
-                             q = Fd[d] # q = F[d]                            
-                             aux = np.flatnonzero(Fs >= q)
-                             if len(aux):
-                                 if aux[0] > sky2[i,j]:
-                                    sky2[i,j] = aux[0] # s = F^-1[Fd[q]]
-                             else:
-                                 sky[i,j] = len(Fs)-1
-                fitsio.write(outfile,sky2)
+                # M,N = dark.shape
+                # for i in range(M):
+                #      for j in range(N):
+                #          if dark_mask[i,j]:
+                #              d = dark[i,j]
+                #              q = Fd[d] # q = F[d]                            
+                #              aux = np.flatnonzero(Fs >= q)
+                #              if len(aux):
+                #                  if aux[0] > sky_fiiled[i,j]:
+                #                     sky_test[i,j] = aux[0] # s = F^-1[Fd[q]]
+                #              else:
+                #                  sky[i,j] = len(Fs)-1
+                fitsio.write(outfile,sky_test)
                
-                sky2 = np.log(sky2-np.min(sky2)+1)
-                sky2 = (255.0/np.max(sky2))*sky2
-                tif.imsave(OUTDIR + fbase2+"+"+darkbase2+"-artif-log.tiff",sky2.astype(np.uint8))
+                sky_test = np.log(sky_test-np.min(sky_test)+1)
+                sky_test = (255.0/np.max(sky_test))*sky_test
+                tif.imsave(OUTDIR + fbase2+"+"+darkbase2+"-artif-log.tiff",sky_test.astype(np.uint8))
                 if d == -1:
                     plt.figure()
-                    plt.imshow(np.log(sky2-np.min(sky2)+1),cmap=CMAP)
+                    plt.imshow(np.log(sky_test-np.min(sky_test)+1),cmap=CMAP)
                 d = d + 1
                 print "pronto."
         k = k + 1

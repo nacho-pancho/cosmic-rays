@@ -88,13 +88,13 @@ with open(DATADIR+lista) as filelist:
         # close holes using morphological operations 
         #
         prev_mask = np.copy(mask)
-        mask = crimg.binary_closure(mask) 
+        mask = crimg.binary_closure_8(mask) 
         dif = np.sum(np.abs(prev_mask-mask))
-        while dif:
-            np.copyto(prev_mask,mask)
-            mask = crimg.binary_closure(mask) 
-            dif = np.sum(np.abs(prev_mask-mask))
-            #print 'dif=',dif
+        #while dif:
+        #    np.copyto(prev_mask,mask)
+        #    mask = crimg.binary_closure_8(mask) 
+        #    dif = np.sum(np.abs(prev_mask-mask))
+        #    #print 'dif=',dif
         pnmgz.imwrite(fprefix + "-3.mask1.pbm.gz",mask,1)
         #tif.imsave(fprefix + '-3.mask1.tiff',mask.astype(np.uint8)*255)
         tif.imsave(fprefix + '-3.mask1.tiff',mask.astype(np.uint8)*255)
@@ -102,8 +102,24 @@ with open(DATADIR+lista) as filelist:
         # compute Laplacian on ROIs
         #
         mask_lap = crimg.mask_laplacian(limg, mask);
-        mask_lap_img = mask_lap.astype(np.double)*(255.0/np.max(mask_lap))
+        #
+        # create a nice image for visualization purposes
+        #
+        NM = np.sum(mask)
+        lhist = crimg.discrete_histogram(mask_lap[mask])
+        clhist = np.cumsum(lhist)
+        l95 = np.flatnonzero(clhist >= 95*NM/100)[0]
+        mask_lap_img = np.minimum(mask_lap,l95)
+        mask_lap_img = mask_lap_img.astype(np.double)*(255.0/np.max(mask_lap_img))
         tif.imsave(fprefix +'-4.roi_lap.tiff',mask_lap_img.astype(np.uint8))
+        plt.figure(4,figsize=(10,15))
+        lhist = lhist*(1.0/clhist[-1])
+        clhist = clhist*(1.0/clhist[-1])
+        plt.loglog(lhist,'*-')
+        plt.loglog(clhist,'*-')
+        plt.grid(True)
+        plt.legend(('P','F'))
+        plt.savefig(fprefix + '-5.roi-lap-hist1.svg')
         #
         # assign a unique label to each ROI
         #
@@ -125,9 +141,11 @@ with open(DATADIR+lista) as filelist:
         hist = hist.astype(np.double)*(1.0/chist[-1])
         chist = chist.astype(np.double)*(1.0/chist[-1])
         plt.figure(2,figsize=(10,15))
-        plt.loglog(hist,'*-')
-        plt.loglog(np.cumsum(hist),'*-')
-        plt.savefig(fprefix + '-5.roi-hist1.tiff')
+        plt.loglog(hist[2450:],'*-')
+        plt.loglog(chist[2450:],'*-')
+        plt.grid(True)
+        plt.legend(('P','F'))
+        plt.savefig(fprefix + '-5.roi-hist1.svg')
 
         roi_stats = crimg.roi_stats(roi_label,mask_lap)
         np.savez(fprefix + '-6.roi-stats1.npz',roi_stats)
@@ -190,9 +208,11 @@ with open(DATADIR+lista) as filelist:
         hist = hist.astype(np.double)*(1.0/chist[-1])
         chist = chist.astype(np.double)*(1.0/chist[-1])
         plt.figure(3,figsize=(10,15))
-        plt.loglog(hist,'*-')
-        plt.loglog(np.cumsum(hist),'*-')
-        plt.savefig(fprefix + '-9-roi-hist2.tiff')
+        plt.loglog(hist[2450:],'*-')
+        plt.loglog(chist[2450:],'*-')
+        plt.grid(True)
+        plt.legend(('P','F'))
+        plt.savefig(fprefix + '-9-roi-hist2.svg')
 
         hist = crimg.discrete_histogram(img[mask == 0])
         np.savez(fprefix + '-9.non-roi-hist2.npz',chist)        
