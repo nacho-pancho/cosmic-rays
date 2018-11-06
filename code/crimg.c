@@ -17,11 +17,13 @@ static PyObject *binary_closure_4     (PyObject* self, PyObject* args);
 static PyObject *binary_closure_8     (PyObject *self, PyObject *args);
 static PyObject *discrete_histogram   (PyObject* self, PyObject* args);
 static PyObject *discrete_log2rootk   (PyObject *self, PyObject *args);
+static PyObject *laplacian            (PyObject *self, PyObject *args); 
 static PyObject *mask_laplacian       (PyObject *self, PyObject *args); 
 static PyObject *mask_refine          (PyObject *self, PyObject *args); 
 static PyObject *roi_label            (PyObject *self, PyObject *args); 
 static PyObject *roi_stats            (PyObject *self, PyObject *args); 
 static PyObject *roi_filter           (PyObject *self, PyObject *args); 
+static PyObject *roi_loglik           (PyObject *self, PyObject *args); 
 static PyObject *inpaint              (PyObject *self, PyObject *args); 
 static PyObject *paste_cr             (PyObject *self, PyObject *args);
 
@@ -39,11 +41,13 @@ static PyMethodDef methods[] = {
   { "binary_closure_8", binary_closure_8, METH_VARARGS, "Morphological closure of 8 for binary images."},
   { "discrete_histogram", discrete_histogram, METH_VARARGS, "Fast histogram for images."},
   { "discrete_log2rootk", discrete_log2rootk, METH_VARARGS, "Fast k-th root-of-2 logarithm for discrete signalsi (k integer)."},
+  { "laplacian", laplacian, METH_VARARGS, "Compute Laplacian of image ."},
   { "mask_laplacian", mask_laplacian, METH_VARARGS, "Compute Laplacian within each ROI ."},
   { "mask_refine", mask_refine, METH_VARARGS, "Assign CR score to each ROI"},
   { "roi_label", roi_label, METH_VARARGS, "Image labeling"},
   { "roi_stats", roi_stats, METH_VARARGS, "Statistics of the different ROIs as defined by the labeling image"},
   { "roi_filter", roi_filter, METH_VARARGS, "Filter out ROIs"},
+  { "roi_loglik", roi_loglik, METH_VARARGS, "ROI log-likelihood. Returns the minus log likelihood of each ROI"},
   { "paste_cr", paste_cr, METH_VARARGS, "Paste CRs from one image to another"},
   { "inpaint", inpaint, METH_VARARGS, "Fill ROIs with backgound distribution."},
   { NULL, NULL, 0, NULL } /* Sentinel */
@@ -412,17 +416,125 @@ static PyObject *discrete_histogram(PyObject *self, PyObject *args) {
 
 //
 //--------------------------------------------------------
-// mask_laplacian
+// laplacian
 //--------------------------------------------------------
 //
 // Receives an image, a ROI mask and replaces it in-place with
 // the absolute value of the Laplacian
 //
 //
+static void _laplacian_8(PyArrayObject* py_I, PyArrayObject* py_L);
+static void _laplacian_16(PyArrayObject* py_I, PyArrayObject* py_L);
+
+static PyObject *laplacian(PyObject *self, PyObject *args) {
+  PyArrayObject *py_I, *py_L;
+  if(!PyArg_ParseTuple(args, "O!", &PyArray_Type, &py_I)) {
+    return NULL;
+  }
+  PyArray_Descr* desc = PyArray_DESCR(py_I);
+  const char typecode = desc->type_num;
+
+  py_L = (PyArrayObject*) PyArray_SimpleNew(PyArray_NDIM(py_I),PyArray_DIMS(py_I),NPY_INT16);
+
+  switch (typecode) {
+  case NPY_UINT8: case NPY_BOOL:
+    _laplacian_8(py_I, py_L);
+    break;
+  case NPY_UINT16:
+    _laplacian_16(py_I, py_L);
+    break;
+  default:
+    PyErr_Warn(PyExc_Warning, "Only unsigned integers allowed.");
+    return NULL;
+  }
+  return PyArray_Return(py_L);  
+}
+
+static void _laplacian_8(PyArrayObject* py_I, PyArrayObject* py_L) {
+  const npy_intp M = PyArray_DIM(py_I,0);
+  const npy_intp N = PyArray_DIM(py_I,1);
+  npy_uint8*     rI = PyArray_DATA(py_I);
+  npy_intp       sI = PyArray_STRIDE(py_I,0);
+  npy_int16*     rL = PyArray_DATA(py_L);
+  npy_intp       sL = PyArray_STRIDE(py_L,0)/2;
+  for (npy_intp i = 0; i < M; i++) {
+    npy_uint8* rIs, *rIn;
+    if (i > 0) {
+      rIn = rI-sI;
+    } else {
+      rIn = rI+sI; // reflected
+    }
+    if (i < (M-1)) {
+      rIs = rI + sI; 
+    } else {
+      rIs = rI - sI; // reflected
+    }
+    for (npy_intp j = 0; j < N; j++) {
+      const npy_intp jw = (j > 0) ? j-1 : 1;
+      const npy_intp je = (j < (N-1)) ? j+1 : N-2;
+      const npy_int32 x  = rI[j];	
+      const npy_int32 w  = rI[jw];
+      const npy_int32 e  = rI[je];
+      const npy_int32 n  = rIn[j];
+      const npy_int32 s  = rIs[j];
+      const npy_int32 nw = rIn[jw];	
+      const npy_int32 ne = rIn[je];	
+      const npy_int32 sw = rIs[jw];	
+      const npy_int32 se = rIs[je];	
+      npy_int32 Lij = ((x<<3) - s - n - e - w - nw - ne -sw -se) >> 4;
+      rL[j] = (npy_int16) (Lij < 0) ? -Lij : Lij;
+    }
+    rI += sI; rL += sL;    
+  }
+}
+
+static void _laplacian_16(PyArrayObject* py_I, PyArrayObject* py_L) {
+  const npy_intp M = PyArray_DIM(py_I,0);
+  const npy_intp N = PyArray_DIM(py_I,1);
+  npy_uint16*    rI = PyArray_DATA(py_I);
+  npy_intp       sI = PyArray_STRIDE(py_I,0)/2;
+  npy_int16*     rL = PyArray_DATA(py_L);
+  npy_intp       sL = PyArray_STRIDE(py_L,0)/2;
+  for (npy_intp i = 0; i < M; i++) {
+    npy_uint16* rIs, *rIn;
+    if (i > 0) {
+      rIn = rI-sI;
+    } else {
+      rIn = rI+sI; // reflected
+    }
+    if (i < (M-1)) {
+      rIs = rI + sI; 
+    } else {
+      rIs = rI - sI; // reflected
+    }
+    for (npy_intp j = 0; j < N; j++) {
+      const npy_intp jw = (j > 0) ? j-1 : 1;
+      const npy_intp je = (j < (N-1)) ? j+1 : N-2;
+      const npy_int32 x = rI[j];	
+      const npy_int32 w = rI[jw];
+      const npy_int32 e = rI[je];
+      const npy_int32 n =  rIn[j];
+      const npy_int32 s =  rIs[j];
+      const npy_int32 nw = rIn[jw];	
+      const npy_int32 ne = rIn[je];	
+      const npy_int32 sw = rIs[jw];	
+      const npy_int32 se = rIs[je];	
+      npy_int32 Lij = ((x<<3) - s - n - e - w - nw - ne -sw -se) >> 4;
+      rL[j] = (npy_int16) (Lij < 0) ? -Lij : Lij;
+    }
+    rI += sI; rL += sL;    
+  }
+}
+
+
+//
+//--------------------------------------------------------
+// mask_refine
+//--------------------------------------------------------
+//
+
 static void _mask_laplacian_8(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
 static void _mask_laplacian_16(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
-static void _mask_laplacian_32(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
-static void _mask_laplacian_64(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L);
 
 static PyObject *mask_laplacian(PyObject *self, PyObject *args) {
   PyArrayObject *py_I, *py_M, *py_L;
@@ -447,7 +559,7 @@ static PyObject *mask_laplacian(PyObject *self, PyObject *args) {
   desc = PyArray_DESCR(py_I);
   typecode = desc->type_num;
 
-  py_L = (PyArrayObject*) PyArray_SimpleNew(PyArray_NDIM(py_I),PyArray_DIMS(py_I),NPY_UINT16);
+  py_L = (PyArrayObject*) PyArray_SimpleNew(PyArray_NDIM(py_I),PyArray_DIMS(py_I),NPY_INT16);
 
   switch (typecode) {
   case NPY_UINT8: case NPY_BOOL:
@@ -455,12 +567,6 @@ static PyObject *mask_laplacian(PyObject *self, PyObject *args) {
     break;
   case NPY_UINT16:
     _mask_laplacian_16(py_I, py_M, py_L);
-    break;
-  case NPY_UINT32:
-    _mask_laplacian_32(py_I, py_M, py_L);
-    break;
-  case NPY_UINT64:
-    _mask_laplacian_64(py_I, py_M, py_L);
     break;
   default:
     PyErr_Warn(PyExc_Warning, "Only unsigned integers allowed.");
@@ -476,7 +582,7 @@ static void _mask_laplacian_8(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayO
   npy_intp       sM = PyArray_STRIDE(py_M,0);
   npy_uint8*     rI = PyArray_DATA(py_I);
   npy_intp       sI = PyArray_STRIDE(py_I,0);
-  npy_uint16*    rL = PyArray_DATA(py_L);
+  npy_int16*     rL = PyArray_DATA(py_L);
   npy_intp       sL = PyArray_STRIDE(py_L,0)/2;
   for (npy_intp i = 0; i < M; i++) {
     npy_uint8* rIs, *rIn;
@@ -496,14 +602,17 @@ static void _mask_laplacian_8(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayO
       } else {
 	const npy_intp jw = (j > 0) ? j-1 : 1;
 	const npy_intp je = (j < (N-1)) ? j+1 : N-2;
-	const npy_int64 n = rIn[j];
-	const npy_int64 s = rIs[j];
-	const npy_int64 w = rI[jw];
-	const npy_int64 e = rI[je];
-	const npy_int64 x = rI[j];	
-	npy_int64 Lij = (x<<2) - s - n - e - w;
-	if (Lij < 0) Lij = -Lij;
-	rL[j] = (npy_uint16) Lij;
+	const npy_int32 n = rIn[j];
+	const npy_int32 s = rIs[j];
+	const npy_int32 w = rI[jw];
+	const npy_int32 e = rI[je];
+	const npy_int32 x = rI[j];	
+	const npy_int32 nw = rIn[jw];	
+	const npy_int32 ne = rIn[je];	
+	const npy_int32 sw = rIs[jw];	
+	const npy_int32 se = rIs[je];	
+	npy_int32 Lij = ((x<<3) - s - n - e - w - nw - ne -sw -se) >> 4;
+	rL[j] = (npy_int16) (Lij < 0) ? -Lij : Lij;
       }
     }
     rM += sM; rI += sI; rL += sL;    
@@ -511,12 +620,47 @@ static void _mask_laplacian_8(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayO
 }
 
 static void _mask_laplacian_16(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L) {
-}
-
-static void _mask_laplacian_32(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L) {
-}
-
-static void _mask_laplacian_64(PyArrayObject* py_I, PyArrayObject* py_M, PyArrayObject* py_L) {
+  const npy_intp M = PyArray_DIM(py_I,0);
+  const npy_intp N = PyArray_DIM(py_I,1);
+  npy_uint8*     rM = PyArray_DATA(py_M);
+  npy_intp       sM = PyArray_STRIDE(py_M,0);
+  npy_uint16*    rI = PyArray_DATA(py_I);
+  npy_intp       sI = PyArray_STRIDE(py_I,0)/2;
+  npy_int16*     rL = PyArray_DATA(py_L);
+  npy_intp       sL = PyArray_STRIDE(py_L,0)/2;
+  for (npy_intp i = 0; i < M; i++) {
+    npy_uint16* rIs, *rIn;
+    if (i > 0) {
+      rIn = rI-sI;
+    } else {
+      rIn = rI+sI; // reflected
+    }
+    if (i < (M-1)) {
+      rIs = rI + sI; 
+    } else {
+      rIs = rI - sI; // reflected
+    }
+    for (npy_intp j = 0; j < N; j++) {
+      if (!rM[j]) {
+	rL[j] = 0;
+      } else {
+	const npy_intp jw = (j > 0) ? j-1 : 1;
+	const npy_intp je = (j < (N-1)) ? j+1 : N-2;
+	const npy_int32 n = rIn[j];
+	const npy_int32 s = rIs[j];
+	const npy_int32 w = rI[jw];
+	const npy_int32 e = rI[je];
+	const npy_int32 x = rI[j];	
+	const npy_int32 nw = rIn[jw];	
+	const npy_int32 ne = rIn[je];	
+	const npy_int32 sw = rIs[jw];	
+	const npy_int32 se = rIs[je];	
+	npy_int32 Lij = ((x<<3) - s - n - e - w - nw - ne -sw -se) >> 4;
+	rL[j] = (npy_int16) (Lij < 0) ? -Lij : Lij;
+      }
+    }
+    rM += sM; rI += sI; rL += sL;    
+  }
 }
 
 
@@ -1108,6 +1252,78 @@ static PyObject *inpaint(PyObject *self, PyObject *args) {
   }
   Py_INCREF(py_output);
   return PyArray_Return(py_output);
+}
+
+//--------------------------------------------------------
+
+
+//--------------------------------------------------------
+
+static PyObject *roi_loglik(PyObject *self, PyObject *args) {
+  PyArrayObject *py_image, *py_label, *py_hist, *py_loglik;
+  //
+  // Parse arguments: input image, roi mask, roi histogram
+  // returns a vector of the same size as the largest value in roi_label, with the log lik of each ROI
+  //
+  if(!PyArg_ParseTuple(args, "O!O!O!O!",
+                       &PyArray_Type,
+                       &py_image,
+                       &PyArray_Type,
+                       &py_label,
+                       &PyArray_Type,
+                       &py_hist
+		       )) {
+    return NULL;
+  }
+  PyArray_Descr* desc = PyArray_DESCR(py_image);
+  if (desc->type_num != NPY_UINT16) {
+    PyErr_Warn(PyExc_Warning,"Input image (arg 1)  must be unsigned 16 bit integers (np.uint16).");
+    return NULL;
+  }
+  desc = PyArray_DESCR(py_hist);
+  if (desc->type_num != NPY_DOUBLE) {
+    PyErr_Warn(PyExc_Warning,"histogram (arg 3) must be double (np.double).");
+    return NULL;
+  }
+  desc = PyArray_DESCR(py_label);
+  if (desc->type_num != NPY_UINT32) {
+    PyErr_Warn(PyExc_Warning,"ROI label (arg 2) must be numpy.uint32.");
+    return NULL;
+  }
+  const npy_intp M = PyArray_DIM(py_image,0);
+  const npy_intp N = PyArray_DIM(py_image,1);
+
+  const npy_intp simage = PyArray_STRIDE(py_image,0)/2;
+  const npy_intp slabel = PyArray_STRIDE(py_label,0)/4;
+
+  const npy_uint16* pimage = PyArray_DATA(py_image);
+  const npy_uint32* plabel = PyArray_DATA(py_label);
+
+  const npy_double* P = PyArray_DATA(py_hist);
+
+  npy_intp maxlabel = 0;
+  for (npy_intp i = 0; i < M; i++, plabel += slabel) {
+    for (npy_intp j = 0; j < N; j++) {
+      if (plabel[j] > maxlabel) { // within a ROI
+	maxlabel = plabel[j];
+      }
+    }
+  }
+  maxlabel++;
+  py_loglik = (PyArrayObject*) PyArray_SimpleNew(1,&maxlabel,NPY_DOUBLE);
+  PyArray_FILLWBYTE(py_loglik,0);
+  npy_double* ploglik = PyArray_DATA(py_loglik);
+  
+  plabel = PyArray_DATA(py_label);
+  for (npy_intp i = 0; i < M; i++, pimage  += simage, plabel += slabel) {
+    for (npy_intp j = 0; j < N; j++) {
+      const npy_uint32 l = plabel[j];
+      if (l) { // within a ROI
+	ploglik[l] -= log2(P[l]);
+      }
+    }
+  }
+  return PyArray_Return(py_loglik);
 }
 
 //--------------------------------------------------------
