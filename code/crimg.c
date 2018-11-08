@@ -1262,10 +1262,10 @@ static PyObject *inpaint(PyObject *self, PyObject *args) {
 static PyObject *roi_loglik(PyObject *self, PyObject *args) {
   PyArrayObject *py_image, *py_label, *py_hist, *py_loglik;
   //
-  // Parse arguments: input image, roi mask, roi histogram
+  // Parse arguments: input image, roi label, roi histogram
   // returns a vector of the same size as the largest value in roi_label, with the log lik of each ROI
   //
-  if(!PyArg_ParseTuple(args, "O!O!O!O!",
+  if(!PyArg_ParseTuple(args, "O!O!O!",
                        &PyArray_Type,
                        &py_image,
                        &PyArray_Type,
@@ -1315,11 +1315,14 @@ static PyObject *roi_loglik(PyObject *self, PyObject *args) {
   npy_double* ploglik = PyArray_DATA(py_loglik);
   
   plabel = PyArray_DATA(py_label);
+  pimage = PyArray_DATA(py_image);
   for (npy_intp i = 0; i < M; i++, pimage  += simage, plabel += slabel) {
     for (npy_intp j = 0; j < N; j++) {
       const npy_uint32 l = plabel[j];
       if (l) { // within a ROI
-	ploglik[l] -= log2(P[l]);
+	if (P[pimage[j]] > 0)
+	  ploglik[l] -= log2(P[pimage[j]]);
+	
       }
     }
   }

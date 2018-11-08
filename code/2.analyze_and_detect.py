@@ -153,6 +153,7 @@ with open(DATADIR+lista) as filelist:
         # assign a unique label to each ROI
         #
         roi_label = crimg.roi_label(mask)
+        labels = np.unique(roi_label)
         #
         # save it (for debugging purposes)
         #
@@ -176,9 +177,29 @@ with open(DATADIR+lista) as filelist:
         plt.legend(('P','F'))
         plt.savefig(fprefix + '-5.roi-hist1.tiff')
 
+        
         roi_stats = crimg.roi_stats(roi_label,mask_lap)
         np.savez(fprefix + '-6.roi-stats1.npz',roi_stats)
-        #print roi_stats[0,:]
+        laphist = crimg.discrete_histogram(mask_lap[mask_lap > 0])
+        claphist = np.cumsum(laphist)
+        laphist = laphist.astype(np.double)*(1.0/claphist[-1])
+        plt.figure(3)
+        
+        loglik = crimg.roi_loglik(mask_lap.astype(np.uint16),roi_label,laphist)
+        loklik = loglik / roi_stats[:,0]
+        plt.plot(loglik)
+        plt.plot(roi_stats[:,0])
+        plt.show()
+        maxll = np.max(loglik)
+        print "max log lik=",maxll
+
+        loglik_img = np.zeros((M,N))
+        labels = np.flatnonzero(loglik)
+        print labels
+        print loglik[labels]
+        for i in labels:
+            loglik_img[roi_label == i] = 255.0*loglik[i]/maxll
+        tif.imsave(fprefix + '-5.loglik.tiff',loglik_img.astype(np.uint8))
         #
         # filter out roi's based on stats
         #
