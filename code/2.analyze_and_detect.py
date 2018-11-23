@@ -189,7 +189,7 @@ with open(DATADIR+lista) as filelist:
         loklik = loglik / roi_stats[:,0]
         plt.plot(loglik)
         plt.plot(roi_stats[:,0])
-        plt.show()
+        #plt.show()
         maxll = np.max(loglik)
         print "max log lik=",maxll
 

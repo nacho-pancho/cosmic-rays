@@ -23,6 +23,7 @@ static PyObject *mask_refine          (PyObject *self, PyObject *args);
 static PyObject *roi_label            (PyObject *self, PyObject *args); 
 static PyObject *roi_stats            (PyObject *self, PyObject *args); 
 static PyObject *roi_filter           (PyObject *self, PyObject *args); 
+static PyObject *roi_paint            (PyObject *self, PyObject *args); 
 static PyObject *roi_loglik           (PyObject *self, PyObject *args); 
 static PyObject *inpaint              (PyObject *self, PyObject *args); 
 static PyObject *paste_cr             (PyObject *self, PyObject *args);
@@ -47,6 +48,7 @@ static PyMethodDef methods[] = {
   { "roi_label", roi_label, METH_VARARGS, "Image labeling"},
   { "roi_stats", roi_stats, METH_VARARGS, "Statistics of the different ROIs as defined by the labeling image"},
   { "roi_filter", roi_filter, METH_VARARGS, "Filter out ROIs"},
+  { "roi_paint", roi_paint, METH_VARARGS, "Paint ROIs with different colors"},
   { "roi_loglik", roi_loglik, METH_VARARGS, "ROI log-likelihood. Returns the minus log likelihood of each ROI"},
   { "paste_cr", paste_cr, METH_VARARGS, "Paste CRs from one image to another"},
   { "inpaint", inpaint, METH_VARARGS, "Fill ROIs with backgound distribution."},
@@ -1080,6 +1082,49 @@ static PyObject *roi_filter(PyObject *self, PyObject *args) {
   while (PyArray_ITER_NOTDONE(iter1)) {
     npy_intp l = *((npy_uint32*)PyArray_ITER_DATA(iter1));
     *((npy_uint32*)PyArray_ITER_DATA(iter2)) =  (l && pf[l]) ? l : 0;
+    PyArray_ITER_NEXT(iter1);
+    PyArray_ITER_NEXT(iter2);
+  }
+  
+  return PyArray_Return(py_L2);  
+}
+
+//--------------------------------------------------------
+// paint each ROI with a corresponding color
+//
+static PyObject *roi_paint(PyObject *self, PyObject *args) {
+  PyArrayObject *py_L, *py_C, *py_L2;
+  if(!PyArg_ParseTuple(args, "O!O!", &PyArray_Type, &py_L,  &PyArray_Type, &py_C)) {
+    return NULL;
+  }
+  //
+  // type checking
+  //
+  // label image:
+  PyArray_Descr* desc = PyArray_DESCR(py_L);
+  desc = PyArray_DESCR(py_L);
+  char typecode = desc->type_num;
+  if (typecode != NPY_UINT32) {
+    PyErr_Warn(PyExc_Warning,"Label must be numpy.uint32.");
+    return NULL;
+  }
+  // color imagen: uint8
+  desc = PyArray_DESCR(py_C);
+  typecode = desc->type_num;
+  if (typecode != NPY_UINT8) {
+    PyErr_Warn(PyExc_Warning,"Color palette must be numpy.uint8.");
+    return NULL;
+  }
+
+  py_L2 = (PyArrayObject*) PyArray_SimpleNew(PyArray_NDIM(py_L),PyArray_DIMS(py_L),NPY_UINT32);
+
+  PyArrayIterObject* iter1 = (PyArrayIterObject *)PyArray_IterNew((PyObject*)py_L);
+  PyArrayIterObject* iter2 = (PyArrayIterObject *)PyArray_IterNew((PyObject*)py_L2);
+  npy_uint8* pc = (npy_uint8*) PyArray_DATA(py_C);
+  
+  while (PyArray_ITER_NOTDONE(iter1)) {
+    npy_intp l = *((npy_uint32*)PyArray_ITER_DATA(iter1));
+    *((npy_uint32*)PyArray_ITER_DATA(iter2)) =  pc[l];
     PyArray_ITER_NEXT(iter1);
     PyArray_ITER_NEXT(iter2);
   }
