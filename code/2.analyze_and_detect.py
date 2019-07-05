@@ -9,7 +9,7 @@ import sys
 
 #
 # recompile crimg module
-# 
+#
 os.system('python setup.py build')
 #
 # import compiled module
@@ -34,7 +34,7 @@ with open(DATADIR+lista) as filelist:
         #
         # boilerplate, file input/output preparation
         #
-        fname = fname[:-1] 
+        fname = fname[:-1]
         fpath = fname[:(fname.rfind('/')+1)]
         if not os.path.exists(RESDIR + fpath):
             os.system("mkdir -p " + RESDIR + fpath)
@@ -48,26 +48,21 @@ with open(DATADIR+lista) as filelist:
         img = fitsio.read(DATADIR+fname).astype(np.uint16)
         M,N = img.shape
         #
-        # see if there is any non-uniform intensity
-        #
-        #a = np.median(img[ 100:, 100:])
-        #b = np.median(img[ 100:,-100:])
-        #c = np.median(img[-100:, 100:])
-        #d = np.median(img[-100:,-100:])
-        #print a,b,c,d
-        #continue
-        #
-        # transform so that its percentile 10 is mapped to 0
-        # and its maximum to approximately 255, in logarithmic scale
+        # transform image to logarithmic scale
+        # so that all values below the median are mapped to 0
+        # and all values above the median are mapped from 1 to 255
         #
         hist = crimg.discrete_histogram(img)
         chist = np.cumsum(hist)
         L = img.shape[0]*img.shape[1]
         base = np.flatnonzero(chist > (L/2))[0]
-        #
-        # the base of the logarithm is 2^(1/16)
-        #
-        limg = np.round(16.0*np.log2(np.maximum(img-base,np.power(2.0,-16)).astype(np.double))).astype(np.uint8)
+        
+        img = img.astype(np.double)
+        img0 = img-base
+        img1 = np.maximum(img0.astype(np.double),1)
+        img2 = np.log2(img1)
+        limg = (img2*(255.0/np.max(img2))).astype(np.uint8)
+        tif.imsave(fprefix +'-2.log.tiff',limg)
         #
         # compute the discrete histogram of the log-transformed image
         #
@@ -83,30 +78,21 @@ with open(DATADIR+lista) as filelist:
         plt.semilogy(chist,'*-')
         plt.savefig(fprefix + '-1.hist.tiff')
         #
+        # first binary classification mask: 
+        #  log-scale value above absolute value 50
+        #  50 is a magic number set by hand.
         #
-        #
-        med = np.flatnonzero(chist > 0.5)[0]
-        thres = 50 # empirically observed 
-        print 'median=',med,
-        print 'thres=',thres
-        tif.imsave(fprefix +'-2.log.tiff',limg)
-        #
-        # first  binary classification mask, crude
         # the marked regions are referred to as ROI (Region Of Interest)
-        mask = (limg > thres) #
         #
-        # close holes using morphological operations 
+        thres = 50 
+        print 'thres=',thres
+        mask = (limg > thres)
         #
-        prev_mask = np.copy(mask)
-        mask = crimg.binary_closure_8(mask) 
-        dif = np.sum(np.abs(prev_mask-mask))
-        #while dif:
-        #    np.copyto(prev_mask,mask)
-        #    mask = crimg.binary_closure_8(mask) 
-        #    dif = np.sum(np.abs(prev_mask-mask))
-        #    #print 'dif=',dif
+        # close holes using morphological closure with neighborhood 8
+        #
+        tif.imsave(fprefix + '-3.mask0.tiff',mask.astype(np.uint8)*255)
+        mask = crimg.binary_closure_8(mask)
         pnmgz.imwrite(fprefix + "-3.mask1.pbm.gz",mask,1)
-        #tif.imsave(fprefix + '-3.mask1.tiff',mask.astype(np.uint8)*255)
         tif.imsave(fprefix + '-3.mask1.tiff',mask.astype(np.uint8)*255)
         #
         # compute Laplacian on ROIs
@@ -117,46 +103,47 @@ with open(DATADIR+lista) as filelist:
         mask_lap[mask == False] = 0
         #lap = limg.astype(np.int32)
         #                        center           south        north          east            west
-        #lap[1:-1,1:-1] = 8*lap[1:-1,1:-1] - lap[2:,1:-1] - lap[:-2,1:-1] - lap[1:-1,2:] - lap[1:-1,:-2] 
+        #lap[1:-1,1:-1] = 8*lap[1:-1,1:-1] - lap[2:,1:-1] - lap[:-2,1:-1] - lap[1:-1,2:] - lap[1:-1,:-2]
         #                                         se           ne               nw           sw
         #lap[1:-1,1:-1] =   lap[1:-1,1:-1] - lap[2:,2:] - lap[:-2, 2:] - lap[:-2, :-2] - lap[2:,:-2]
         #lap = - lap / 16
         #
-        # create a nice image for visualization purposes
+        # PARENTHESIS: create a nice image for visualization purposes
         #
-        NM = np.sum(mask)
-        lhist = crimg.discrete_histogram(mask_lap[mask])
-        clhist = np.cumsum(lhist)
-        l95 = np.flatnonzero(clhist >= 95*NM/100)[0]
-        mask_lap_img = np.minimum(mask_lap,l95)
-        mask_lap_img = mask_lap_img.astype(np.double)*(255.0/np.max(mask_lap_img))
-        tif.imsave(fprefix +'-4.roi_lap.tiff',mask_lap_img.astype(np.uint8))
-        mask_lap_img = []
-        
-        lhist = crimg.discrete_histogram(lap)
-        clhist = np.cumsum(lhist)
-        l95 = np.flatnonzero(clhist >= 95*L/100)[0]
-        lap_img = lap # np.minimum(lap,l95)
-        lap_img = lap_img.astype(np.double)*(255.0/np.max(lap_img))
-        tif.imsave(fprefix +'-4.lap.tiff',lap_img.astype(np.uint8))
-        lap_img =  []
-
-        plt.figure(4,figsize=(10,15))
-        lhist = lhist*(1.0/clhist[-1])
-        clhist = clhist*(1.0/clhist[-1])
-        plt.loglog(lhist,'*-')
-        plt.loglog(clhist,'*-')
-        plt.grid(True)
-        plt.legend(('P','F'))
-        plt.savefig(fprefix + '-5.roi-lap-hist1.tiff')
+        if False:
+            NM = np.sum(mask)
+            lhist = crimg.discrete_histogram(mask_lap[mask])
+            clhist = np.cumsum(lhist)
+            l95 = np.flatnonzero(clhist >= 95*NM/100)[0]
+            print 'l95:',l95
+            mask_lap_img = np.minimum(mask_lap,l95)
+            mask_lap_img = mask_lap_img.astype(np.double)*(255.0/l95)
+            tif.imsave(fprefix +'-4.roi_lap.tiff',mask_lap_img.astype(np.uint8))
+            mask_lap_img = []        
+            #
+            # compute histogram of log-scale laplacian
+            #
+            lhist = crimg.discrete_histogram(lap)
+            clhist = np.cumsum(lhist)
+            lap_img = lap.astype(np.double)*(255.0/np.max(lap))
+            tif.imsave(fprefix +'-4.lap.tiff',lap_img.astype(np.uint8))
+            lap_img =  []
+            plt.figure(4,figsize=(10,15))
+            lhist = lhist*(1.0/clhist[-1])
+            clhist = clhist*(1.0/clhist[-1])
+            plt.loglog(lhist,'*-')
+            plt.loglog(clhist,'*-')
+            plt.grid(True)
+            plt.legend(('P','F'))
+            plt.savefig(fprefix + '-5.roi-lap-hist1.tiff')
+        #
+        # END PARENTHESIS
+        #
         #
         # assign a unique label to each ROI
         #
         roi_label = crimg.roi_label(mask)
         labels = np.unique(roi_label)
-        #
-        # save it (for debugging purposes)
-        #
         #
         # Compute various statistics for each ROI.
         # For each ROI, the statistics are:
@@ -165,26 +152,29 @@ with open(DATADIR+lista) as filelist:
         #
         # row 0 contains the aforementioned values for the union of all ROI's
         #
-        hist = crimg.discrete_histogram(img[mask > 0])
-        np.savez(fprefix + '-5.roi-hist1.npz',hist)        
-        chist = np.cumsum(hist)
-        hist = hist.astype(np.double)*(1.0/chist[-1])
-        chist = chist.astype(np.double)*(1.0/chist[-1])
-        plt.figure(2,figsize=(10,15))
-        plt.loglog(hist[2450:],'*-')
-        plt.loglog(chist[2450:],'*-')
-        plt.grid(True)
-        plt.legend(('P','F'))
-        plt.savefig(fprefix + '-5.roi-hist1.tiff')
+        if False:
+            hist = crimg.discrete_histogram(img[mask > 0].astype(np.uint8))
+            np.savez(fprefix + '-5.roi-hist1.npz',hist)
+            chist = np.cumsum(hist)
+            hist = hist.astype(np.double)*(1.0/chist[-1])
+            chist = chist.astype(np.double)*(1.0/chist[-1])
+            plt.figure(2,figsize=(10,15))
+            plt.loglog(hist[2450:],'*-')
+            plt.loglog(chist[2450:],'*-')
+            plt.grid(True)
+            plt.legend(('P','F'))
+            plt.savefig(fprefix + '-5.roi-hist1.tiff')
 
-        
+        #
+        #
+        #
         roi_stats = crimg.roi_stats(roi_label,mask_lap)
         np.savez(fprefix + '-6.roi-stats1.npz',roi_stats)
         laphist = crimg.discrete_histogram(mask_lap[mask_lap > 0])
         claphist = np.cumsum(laphist)
         laphist = laphist.astype(np.double)*(1.0/claphist[-1])
         plt.figure(3)
-        
+
         loglik = crimg.roi_loglik(mask_lap.astype(np.uint16),roi_label,laphist)
         loklik = loglik / roi_stats[:,0]
         plt.plot(loglik)
@@ -214,7 +204,7 @@ with open(DATADIR+lista) as filelist:
         p50 = roi_stats[0,4]
         p75 = roi_stats[0,5]
         p90 = roi_stats[0,6]
-        p100 = roi_stats[0,7]        
+        p100 = roi_stats[0,7]
         #
         # large regions are considered CRs if their average is above twice the global average
         #
@@ -223,8 +213,8 @@ with open(DATADIR+lista) as filelist:
         #
         # small regions (<= 4 pixels) are considered CRs if their 25th percentile is above 140
         #
-        singletons = roi_stats[:,0] <= 4 
-        roi_mask[singletons]  = (roi_stats[singletons,3] > 140) 
+        singletons = roi_stats[:,0] <= 4
+        roi_mask[singletons]  = (roi_stats[singletons,3] > 140)
         print "# after filtering small ROIs:",np.sum(roi_mask)
         #
         # filter out ROIs using the defined roi_mask vector
@@ -258,12 +248,12 @@ with open(DATADIR+lista) as filelist:
         #
         # finally, compute and save histograms of filtered ROIs and
         # their complement in original image scale
-        # 
+        #
         # this is for inpainting ROIs in input images
         # in and properly superimposing CRs on clean images
         #
         hist = crimg.discrete_histogram(img[mask > 0])
-        np.savez(fprefix + '-9.roi-hist2.npz',hist)        
+        np.savez(fprefix + '-9.roi-hist2.npz',hist)
         chist = np.cumsum(hist)
         hist = hist.astype(np.double)*(1.0/chist[-1])
         chist = chist.astype(np.double)*(1.0/chist[-1])
@@ -275,7 +265,7 @@ with open(DATADIR+lista) as filelist:
         plt.savefig(fprefix + '-9-roi-hist2.tiff')
 
         hist = crimg.discrete_histogram(img[mask == 0])
-        np.savez(fprefix + '-9.non-roi-hist2.npz',chist)        
+        np.savez(fprefix + '-9.non-roi-hist2.npz',chist)
         k = k + 1
-        
+
 #plt.show()
